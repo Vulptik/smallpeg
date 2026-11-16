@@ -31,7 +31,7 @@ jobs:
         run: cargo install wasm-bindgen-cli --version "$(grep '^wasm-bindgen = ' wasm/Cargo.toml | cut -d'"' -f2 | tr -d '=')" --locked
       - name: Build the site
         run: ./site/build.sh
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: site/dist
 
@@ -43,4 +43,4 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

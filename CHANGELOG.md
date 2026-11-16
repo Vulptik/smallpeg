@@ -3,6 +3,19 @@
 Notable changes per version. 0.13.0 is the first published release; the
 entries before it record development that preceded publication.
 
+## 0.13.1
+
+No code changes; the encoder's output is identical to 0.13.0.
+
+- README rewritten for users: install, features, usage. The status list
+  and roadmap, which were development notes, are gone.
+- `homepage` points at the landing page, https://sawapi.github.io/smallpeg/.
+- npm package: requires Node 22 or later (18 and 20 are end of life).
+- `#![forbid(unsafe_code)]`: the crate already used no `unsafe`; now the
+  compiler enforces it.
+- Releases are published from GitHub Actions with trusted publishing, so
+  no registry token is stored.
+
 ## 0.13.0
 
 - npm package `smallpeg`: WebAssembly builds for Node and for browsers

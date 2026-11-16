@@ -109,6 +109,7 @@
 //! not the file size, so for untrusted input check [`jpeg_info`] or pass
 //! [`Limits`] with a pixel budget to the `_with` variants.
 
+#![forbid(unsafe_code)]
 // The DSP-style loops in this file index several arrays with one shared
 // position; the iterator forms clippy suggests obscure the math.
 #![allow(clippy::needless_range_loop)]
