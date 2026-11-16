@@ -46,11 +46,11 @@ dependencies = [
 
 [[package]]
 name = "smallpeg"
-version = "0.13.0"
+version = "0.13.1"
 
 [[package]]
 name = "smallpeg-wasm"
-version = "0.13.0"
+version = "0.13.1"
 dependencies = [
  "smallpeg",
  "wasm-bindgen",
