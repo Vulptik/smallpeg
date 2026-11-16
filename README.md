@@ -8,6 +8,9 @@ encoder under a permissive license, with zero dependencies and first-class
 
 The name is what it does: small JPEGs.
 
+Also on npm as `smallpeg`: the same code compiled to WebAssembly for Node
+and the browser (see [npm/README.md](npm/README.md)).
+
 ## Status: v0.13
 
 - Baseline sequential and progressive JFIF, grayscale + RGB, 4:4:4 / 4:2:0

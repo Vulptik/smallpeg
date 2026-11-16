@@ -38,6 +38,34 @@ jobs:
       - name: Package check
         run: cargo publish --dry-run --allow-dirty
 
+  npm:
+    # The WebAssembly bindings and the npm package built from them.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: wasm
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install wasm-bindgen CLI
+        run: cargo install wasm-bindgen-cli --version "$(grep '^wasm-bindgen = ' wasm/Cargo.toml | cut -d'"' -f2 | tr -d '=')" --locked
+      - name: Format
+        run: cargo fmt --manifest-path wasm/Cargo.toml --check
+      - name: Clippy
+        run: cargo clippy --manifest-path wasm/Cargo.toml --release --target wasm32-unknown-unknown -- -D warnings
+      - name: Build
+        run: ./npm/build.sh
+      - name: Test
+        run: node npm/test.mjs
+      - name: Pack
+        run: cd npm && npm pack --dry-run
+
   msrv:
     # rust-version in Cargo.toml is a promise; this keeps it honest.
     runs-on: ubuntu-latest

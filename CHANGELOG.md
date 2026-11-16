@@ -5,6 +5,10 @@ entries before it record development that preceded publication.
 
 ## 0.13.0
 
+- npm package `smallpeg`: WebAssembly builds for Node and for browsers
+  and bundlers, built from the bindings crate in `wasm/` (the Rust crate
+  itself still has no dependencies). Encode, optimize, strip metadata,
+  decode, read the header, orientation, crop, resize, fit.
 - `crop` (with `CropRect`): copies a rectangle out of interleaved pixels
   with any channel count; `None` if the rectangle is empty or not inside
   the image.

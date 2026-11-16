@@ -1,0 +1,54 @@
+{
+  "name": "smallpeg",
+  "version": "0.13.0",
+  "description": "A dependency-free JPEG encoder, lossless optimizer and decoder, compiled to WebAssembly for Node and the browser.",
+  "license": "(MIT OR Apache-2.0)",
+  "main": "./node/smallpeg_wasm.js",
+  "types": "./node/smallpeg_wasm.d.ts",
+  "exports": {
+    ".": {
+      "types": "./node/smallpeg_wasm.d.ts",
+      "node": "./node/smallpeg_wasm.js",
+      "default": "./web/smallpeg_wasm.js"
+    },
+    "./web": {
+      "types": "./web/smallpeg_wasm.d.ts",
+      "default": "./web/smallpeg_wasm.js"
+    }
+  },
+  "files": [
+    "node",
+    "web",
+    "LICENSE-MIT",
+    "LICENSE-APACHE",
+    "THIRD_PARTY.md"
+  ],
+  "keywords": [
+    "jpeg",
+    "jpg",
+    "encoder",
+    "compress",
+    "optimize",
+    "image",
+    "wasm",
+    "webassembly"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sawapi/smallpeg.git",
+    "directory": "npm"
+  },
+  "homepage": "https://github.com/sawapi/smallpeg",
+  "bugs": {
+    "url": "https://github.com/sawapi/smallpeg/issues"
+  },
+  "author": "sawapi",
+  "sideEffects": false,
+  "scripts": {
+    "prepack": "node -e \"require('fs').accessSync('node/smallpeg_wasm_bg.wasm')\" || (cd .. && ./npm/build.sh)",
+    "test": "node test.mjs"
+  }
+}

@@ -12,14 +12,15 @@ readme = "README.md"
 keywords = ["jpeg", "encoder", "image", "compression"]
 categories = ["multimedia::images", "compression"]
 # The published package is the library plus its one example.
+# Leading slashes anchor each pattern at the root (npm/ has its own copies).
 include = [
-    "src/**",
-    "examples/jopt.rs",
-    "README.md",
-    "CHANGELOG.md",
-    "THIRD_PARTY.md",
-    "LICENSE-MIT",
-    "LICENSE-APACHE",
+    "/src/**",
+    "/examples/jopt.rs",
+    "/README.md",
+    "/CHANGELOG.md",
+    "/THIRD_PARTY.md",
+    "/LICENSE-MIT",
+    "/LICENSE-APACHE",
 ]
 
 [features]
