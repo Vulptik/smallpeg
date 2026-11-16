@@ -1,2 +1,8 @@
 /target
 /.claude/worktrees/
+/wasm/target/
+/npm/node/
+/npm/web/
+/npm/LICENSE-*
+/npm/THIRD_PARTY.md
+/npm/*.tgz
