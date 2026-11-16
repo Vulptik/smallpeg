@@ -1,0 +1,36 @@
+name: Fuzz
+
+on:
+  workflow_dispatch:
+    inputs:
+      seconds:
+        description: "max_total_time per target (seconds)"
+        default: "600"
+  schedule:
+    - cron: "0 3 * * 1" # weekly
+
+jobs:
+  fuzz:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: Swatinem/rust-cache@v2
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz --locked
+      - name: Fuzz optimize_jpeg
+        env:
+          FUZZ_SECONDS: ${{ github.event.inputs.seconds || '600' }}
+        run: |
+          case "$FUZZ_SECONDS" in
+            ''|*[!0-9]*) echo "seconds must be numeric" >&2; exit 1;;
+          esac
+          cargo +nightly fuzz run optimize_jpeg -- \
+            -max_total_time="$FUZZ_SECONDS" \
+            -rss_limit_mb=4096
+      - name: Upload crash artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-artifacts
+          path: fuzz/artifacts

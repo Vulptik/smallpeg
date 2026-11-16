@@ -1,0 +1,34 @@
+[package]
+name = "smallpeg"
+version = "0.13.0"
+edition = "2024"
+# 1.88 for let-chains and slice::as_chunks_mut (1.87 fails on both);
+# edition 2024 itself needs only 1.85. Verified by the msrv job in CI.
+rust-version = "1.88"
+description = "A from-scratch, dependency-free JPEG encoder in pure Rust: trellis quantization, optimized progressive scans, optimized Huffman tables, AAN DCT, Lanczos3 resize."
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/sawapi/smallpeg"
+readme = "README.md"
+keywords = ["jpeg", "encoder", "image", "compression"]
+categories = ["multimedia::images", "compression"]
+# The published package is the library plus its one example.
+include = [
+    "src/**",
+    "examples/jopt.rs",
+    "README.md",
+    "CHANGELOG.md",
+    "THIRD_PARTY.md",
+    "LICENSE-MIT",
+    "LICENSE-APACHE",
+]
+
+[features]
+# Multithreaded trellis (std::thread only, still zero dependencies).
+# Not available on wasm32-unknown-unknown; leave off there.
+parallel = []
+
+[dependencies]
+
+[dev-dependencies]
+image = { version = "0.25.10", default-features = false, features = ["jpeg", "png", "webp"] }
+jpeg-encoder = "0.7.1"
