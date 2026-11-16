@@ -6,3 +6,4 @@
 /npm/LICENSE-*
 /npm/THIRD_PARTY.md
 /npm/*.tgz
+/site/dist/

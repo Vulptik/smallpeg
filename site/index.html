@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>smallpeg — small JPEGs, zero dependencies</title>
+  <meta name="description" content="A JPEG encoder, optimizer and decoder written from the JPEG standard in Rust, with no dependencies. Try it in your browser: your image never leaves your device.">
+  <meta name="color-scheme" content="light dark">
+  <meta property="og:title" content="smallpeg — small JPEGs, zero dependencies">
+  <meta property="og:description" content="A dependency-free JPEG encoder in Rust and WebAssembly. Compress a photo in your browser; nothing is uploaded.">
+  <meta property="og:type" content="website">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <script>
+    // Apply a saved theme choice before first paint (no flash).
+    try { const t = localStorage.getItem("theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch {}
+  </script>
+  <link rel="stylesheet" href="style.css">
+  <link rel="modulepreload" href="pkg/smallpeg_wasm.js">
+</head>
+<body>
+  <header class="nav">
+    <div class="wrap nav-inner">
+      <a class="brand" href="#top" aria-label="smallpeg home">
+        <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><use href="#mark"/></svg>
+        <span>small<b>peg</b></span>
+      </a>
+      <div class="nav-right">
+        <nav aria-label="Sections">
+          <a href="#inside">What's inside</a>
+          <a href="#measured">Measured</a>
+          <a href="#use">Install</a>
+          <a class="ext" href="https://github.com/sawapi/smallpeg">GitHub</a>
+        </nav>
+        <button class="theme" id="theme" type="button" aria-label="Switch to dark theme" title="Switch theme">
+          <svg class="sun" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="3.6" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M10 1.8v2.1M10 16.1v2.1M1.8 10h2.1M16.1 10h2.1M4.2 4.2l1.5 1.5M14.3 14.3l1.5 1.5M4.2 15.8l1.5-1.5M14.3 5.7l1.5-1.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+          <svg class="moon" viewBox="0 0 20 20" aria-hidden="true"><path d="M16.5 12.3A7 7 0 0 1 7.7 3.5a7 7 0 1 0 8.8 8.8z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main id="top">
+    <section class="hero wrap">
+      <div class="hero-copy">
+        <p class="eyebrow">Free &amp; open source · pure Rust · runs in your browser</p>
+        <h1>Small JPEGs,<br>zero dependencies.</h1>
+        <p class="lead">smallpeg is a JPEG encoder, optimizer and decoder written from the JPEG standard in Rust. Drop a photo or pick a sample: it is compressed right here, in WebAssembly — <strong>your image never leaves this device</strong>.</p>
+        <ul class="chips" aria-label="Highlights">
+          <li><svg viewBox="0 0 20 20" aria-hidden="true"><use href="#i-lock"/></svg>No upload</li>
+          <li><svg viewBox="0 0 20 20" aria-hidden="true"><use href="#i-box"/></svg>No dependencies</li>
+          <li><svg viewBox="0 0 20 20" aria-hidden="true"><use href="#i-scale"/></svg>MIT / Apache-2.0</li>
+        </ul>
+      </div>
+
+      <section class="tool" id="try" aria-label="Compress an image">
+        <div class="stage" id="stage" data-state="idle">
+          <!-- idle -->
+          <div class="idle">
+            <label class="drop" id="drop" for="file">
+              <input type="file" id="file" accept="image/jpeg,image/png,image/webp">
+              <svg class="drop-icon" viewBox="0 0 48 48" aria-hidden="true"><use href="#i-photo"/></svg>
+              <span class="drop-title">Drop a photo here</span>
+              <span class="drop-sub">or <u>choose a file</u> · JPEG, PNG or WebP</span>
+              <span class="drop-note" id="engine">Loading the engine…</span>
+            </label>
+            <div class="samples" role="group" aria-labelledby="samplesLabel">
+              <span id="samplesLabel">Or try a sample photo</span>
+              <div id="samples"></div>
+            </div>
+          </div>
+
+          <!-- working -->
+          <div class="working" aria-live="polite">
+            <div class="spinner" aria-hidden="true"></div>
+            <p class="file-name" id="workName"></p>
+            <p class="muted">Compressing… <span id="elapsed">0.0</span> s</p>
+            <button class="btn ghost" id="cancel" type="button">Cancel</button>
+          </div>
+
+          <!-- done -->
+          <div class="done" aria-live="polite">
+            <figure class="peek" id="peek" tabindex="0" role="button" aria-label="Hold to see the original">
+              <img class="out" id="outImg" alt="Compressed result">
+              <img class="orig" id="origImg" alt="Original">
+              <figcaption id="peekLabel">Result · hold to see the original</figcaption>
+              <button class="expand" id="expand" type="button" aria-label="Compare side by side" title="Compare side by side">
+                <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M12 3h5v5M8 17H3v-5M17 3l-6 6M3 17l6-6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+            </figure>
+            <p class="saving"><span id="pct"></span><small id="pctLabel"></small></p>
+            <div class="bars">
+              <div class="bar-row"><span>Before</span><div class="bar"><i id="barBefore"></i></div><b id="sizeBefore"></b></div>
+              <div class="bar-row"><span>After</span><div class="bar after"><i id="barAfter"></i></div><b id="sizeAfter"></b></div>
+            </div>
+            <p class="muted small summary"><span class="file-name" id="doneName"></span><span id="meta"></span></p>
+            <div class="actions">
+              <a class="btn primary" id="download" download>
+                <svg viewBox="0 0 20 20" aria-hidden="true"><use href="#i-down"/></svg>Download
+              </a>
+              <button class="btn ghost" id="again" type="button">Try another</button>
+            </div>
+          </div>
+
+          <!-- error -->
+          <div class="error" role="alert">
+            <p class="file-name" id="errName"></p>
+            <p id="errMsg"></p>
+            <button class="btn ghost" id="errAgain" type="button">Try another</button>
+          </div>
+        </div>
+
+        <form class="settings" id="settings" onsubmit="return false">
+          <div class="field">
+            <label for="quality">Quality <output id="qOut" for="quality">80</output></label>
+            <input type="range" id="quality" min="30" max="95" step="1" value="80">
+            <div class="scale"><span>smaller</span><span>sharper</span></div>
+          </div>
+          <div class="field row">
+            <label for="maxSide">Longest side
+              <select id="maxSide">
+                <option value="0">Keep original size</option>
+                <option value="2560">2560 px</option>
+                <option value="1600">1600 px</option>
+                <option value="1024">1024 px</option>
+              </select>
+            </label>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="fullChroma">
+            <span class="switch" aria-hidden="true"></span>
+            <span><b>Full-resolution color (4:4:4)</b><small>Keeps colored text and thin colored lines crisp. Larger file.</small></span>
+          </label>
+          <label class="toggle">
+            <input type="checkbox" id="lossless" disabled>
+            <span class="switch" aria-hidden="true"></span>
+            <span><b>Lossless, for JPEG input</b><small id="losslessNote">Re-codes a JPEG without changing a pixel. Removes metadata such as GPS position; keeps orientation and color profile.</small></span>
+          </label>
+        </form>
+      </section>
+    </section>
+
+    <section class="results">
+      <div class="wrap stats">
+        <div><b>−5 to −7%</b><span>on iPhone photos re-coded losslessly: smaller files, every pixel identical.</span></div>
+        <div><b>0.3 s</b><span>to encode a 12-megapixel photo at quality 80 on one core (Apple M6, native build).</span></div>
+        <div><b>0</b><span>dependencies. About 190 KB of WebAssembly for the browser and Node.</span></div>
+      </div>
+      <p class="wrap fine">Measured on the sample photos below. Your images will differ.</p>
+    </section>
+
+    <section class="wrap section" id="inside">
+      <h2>What's inside</h2>
+      <p class="section-lead">Everything it takes to make a JPEG smaller, in one crate that builds for <code>wasm32-unknown-unknown</code> as it is.</p>
+      <div class="cards">
+        <article class="card">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-grid"/></svg>
+          <h3>An encoder that searches</h3>
+          <p>Trellis quantization decides every coefficient against its real bit cost. Huffman tables and progressive scans are optimized per image. Gray, RGB and CMYK; 4:4:4 and 4:2:0.</p>
+        </article>
+        <article class="card">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-equal"/></svg>
+          <h3>Lossless re-coding</h3>
+          <p><code>optimize_jpeg</code> shrinks an existing JPEG without changing a pixel. <code>strip_metadata</code> removes EXIF, GPS and XMP the same way, keeping orientation and the color profile.</p>
+        </article>
+        <article class="card">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-image"/></svg>
+          <h3>Read, crop, resize</h3>
+          <p>A decoder for baseline and progressive files, EXIF orientation, cropping, and Lanczos3 resizing with a linear-light option that keeps fine detail from darkening.</p>
+        </article>
+        <article class="card">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-shield"/></svg>
+          <h3>Built for untrusted input</h3>
+          <p>Malformed files return <code>None</code> instead of panicking. Pixel and scan limits are checked before anything is allocated, and the JPEG parser is fuzzed weekly in CI.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="wrap section" id="measured">
+      <h2>Measured on the sample photos</h2>
+      <p class="section-lead">The four samples at full resolution, as they came off the phone. Each cell is the output file's size, and below it the change from the original file.</p>
+      <div class="table-card">
+        <table>
+          <thead>
+            <tr><th>Photo</th><th>Original file</th><th>Lossless re-code<small>same pixels</small></th><th>Quality 80<small>full size</small></th><th>Quality 80<small>fit in 1600 px</small></th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Autumn leaves<small>3264 × 2448 · JPEG</small></td><td>2.62 MB</td><td>2.49 MB<small>−4.8%</small></td><td>1.90 MB<small>−27.3%</small></td><td>637 KB<small>−75.7%</small></td></tr>
+            <tr><td>Green canopy<small>3264 × 2448 · JPEG</small></td><td>2.68 MB</td><td>2.50 MB<small>−6.9%</small></td><td>1.50 MB<small>−44.3%</small></td><td>499 KB<small>−81.4%</small></td></tr>
+            <tr><td>Beach<small>4032 × 3024 · HEIC</small></td><td>2.16 MB</td><td class="na">—<small>not a JPEG</small></td><td>1.56 MB<small>−27.6%</small></td><td>344 KB<small>−84.1%</small></td></tr>
+            <tr><td>Lagoon<small>4032 × 3024 · HEIC</small></td><td>1.65 MB</td><td class="na">—<small>not a JPEG</small></td><td>1.17 MB<small>−29.0%</small></td><td>251 KB<small>−84.8%</small></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <ul class="notes plain">
+        <li><b>Lossless re-code</b> rewrites how an existing JPEG is stored; the decoded pixels are bit-identical. It only applies to JPEG files.</li>
+        <li><b>Quality 80</b> re-encodes the pixels with the default settings (4:2:0). At full size, SSIMULACRA2 against the original pixels was 66.6 to 77.3 (100 means identical).</li>
+        <li><b>Encode time</b> at full size was 0.25 to 0.33 s per photo on one core of an Apple M6 (native build). The WebAssembly build in this page is slower.</li>
+        <li><b>The samples on this page</b> are 1200 px copies at quality 92 with all metadata removed, so the tool above has something to start from.</li>
+      </ul>
+    </section>
+
+    <section class="wrap section" id="use">
+      <h2>Use it in your code</h2>
+      <p class="section-lead">The same encoder ships as a Rust crate and as an npm package.</p>
+
+      <div class="lang">
+        <div class="lang-head">
+          <h3>Rust</h3>
+          <div class="install"><code>cargo add smallpeg</code><button class="copy-cmd" type="button" data-copy="cargo add smallpeg">Copy</button></div>
+        </div>
+        <p class="lang-note">Rust 1.88 or later. No dependencies, and it builds for <code>wasm32-unknown-unknown</code> as is. API documentation is on <a href="https://docs.rs/smallpeg">docs.rs</a>.</p>
+        <div class="code-card">
+          <div class="tabs" role="tablist" aria-label="Rust examples">
+            <button role="tab" aria-selected="true" aria-controls="ex-enc" id="tab-enc">Encode</button>
+            <button role="tab" aria-selected="false" aria-controls="ex-photo" id="tab-photo" tabindex="-1">Phone photo</button>
+            <button role="tab" aria-selected="false" aria-controls="ex-opt" id="tab-opt" tabindex="-1">Lossless</button>
+            <button class="copy" type="button">Copy</button>
+          </div>
+          <pre role="tabpanel" id="ex-enc" aria-labelledby="tab-enc"><code><span class="c">// rgb: width * height * 3 bytes, interleaved</span>
+let jpeg: Vec&lt;u8&gt; = smallpeg::Encoder::new(80).encode_rgb(&amp;rgb, width, height);
+
+<span class="c">// full-resolution color, for screenshots and documents</span>
+let jpeg = smallpeg::Encoder::new(85)
+    .sampling(smallpeg::Sampling::S444)
+    .encode_rgb(&amp;rgb, width, height);</code></pre>
+          <pre role="tabpanel" id="ex-photo" aria-labelledby="tab-photo" hidden><code><span class="c">// turn it upright, fit it in 1600 px, write a new JPEG without the EXIF</span>
+fn shrink(photo: &amp;[u8]) -&gt; Option&lt;Vec&lt;u8&gt;&gt; {
+    let info = smallpeg::jpeg_info(photo)?;
+    let img = smallpeg::decode_jpeg(photo)?;
+    let (px, w, h) = smallpeg::apply_orientation(
+        &amp;img.pixels, img.width, img.height, img.channels as usize, info.orientation,
+    );
+    let (nw, nh) = smallpeg::fit_within(w, h, 1600, 1600);
+    let small = smallpeg::resize_rgb_linear(&amp;px, w, h, nw, nh);
+    Some(smallpeg::Encoder::new(80).encode_rgb(&amp;small, nw, nh))
+}</code></pre>
+          <pre role="tabpanel" id="ex-opt" aria-labelledby="tab-opt" hidden><code><span class="c">// same pixels, fewer bytes</span>
+if let Some(opt) = smallpeg::optimize_jpeg(&amp;jpeg) {
+    if opt.len() &lt; jpeg.len() { <span class="c">/* keep opt */</span> }
+}
+
+<span class="c">// drop EXIF, GPS and XMP; keep orientation and the ICC profile</span>
+let clean = smallpeg::strip_metadata(&amp;jpeg);</code></pre>
+        </div>
+      </div>
+
+      <div class="lang">
+        <div class="lang-head">
+          <h3>JavaScript</h3>
+          <div class="install"><code>npm install smallpeg</code><button class="copy-cmd" type="button" data-copy="npm install smallpeg">Copy</button></div>
+        </div>
+        <p class="lang-note">Node 22 or later, and current browsers through any bundler. One WebAssembly file of about 190 KB, no native binaries, TypeScript types included. The full API is in the <a href="https://www.npmjs.com/package/smallpeg">package README</a>.</p>
+        <div class="code-card">
+          <div class="tabs" role="tablist" aria-label="JavaScript examples">
+            <button role="tab" aria-selected="true" aria-controls="ex-node" id="tab-node">Node</button>
+            <button role="tab" aria-selected="false" aria-controls="ex-web" id="tab-web" tabindex="-1">Browser</button>
+            <button class="copy" type="button">Copy</button>
+          </div>
+          <pre role="tabpanel" id="ex-node" aria-labelledby="tab-node"><code>import { encode, optimize, stripMetadata } from "smallpeg";
+import { readFileSync, writeFileSync } from "node:fs";
+
+<span class="c">// rgb: width * height * 3 bytes; channels can be 1, 3 or 4 (RGBA)</span>
+const jpeg = encode(rgb, width, height, 3, 80);
+
+<span class="c">// same pixels, fewer bytes</span>
+const input = readFileSync("photo.jpg");
+const smaller = optimize(input);
+if (smaller &amp;&amp; smaller.length &lt; input.length) writeFileSync("photo.jpg", smaller);
+
+<span class="c">// drop EXIF, GPS and XMP</span>
+const clean = stripMetadata(input);</code></pre>
+          <pre role="tabpanel" id="ex-web" aria-labelledby="tab-web" hidden><code>import init, { encode } from "smallpeg/web";
+
+await init(); <span class="c">// loads the .wasm file once</span>
+
+const { data, width, height } = ctx.getImageData(0, 0, w, h);
+const jpeg = encode(data, width, height, 4, 80); <span class="c">// RGBA, alpha onto white</span>
+const blob = new Blob([jpeg], { type: "image/jpeg" });</code></pre>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div class="cmp" id="cmp" role="dialog" aria-modal="true" aria-labelledby="cmpTitle" hidden>
+    <div class="cmp-bar">
+      <p class="cmp-title" id="cmpTitle"></p>
+      <div class="cmp-zoom" role="group" aria-label="Zoom">
+        <button type="button" data-zoom="fit">Fit</button>
+        <button type="button" data-zoom="1">100%</button>
+        <button type="button" data-zoom="2">200%</button>
+        <button type="button" data-zoom="4">400%</button>
+      </div>
+      <button class="cmp-close" id="cmpClose" type="button" aria-label="Close comparison">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5L5 15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div class="cmp-view" id="cmpView">
+      <img id="cmpOrig" alt="Original" draggable="false">
+      <div class="cmp-clip" id="cmpClip"><img id="cmpOut" alt="Compressed result" draggable="false"></div>
+      <div class="cmp-divider" id="cmpDivider">
+        <button class="cmp-handle" id="cmpHandle" type="button" aria-label="Move the divider (arrow keys)">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M7 5l-4 5 4 5M13 5l4 5-4 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+      <span class="cmp-label left">Original <small id="cmpOrigSize"></small></span>
+      <span class="cmp-label right">smallpeg <small id="cmpOutSize"></small></span>
+    </div>
+    <p class="cmp-hint">Drag the handle to compare · drag the image to pan · scroll to zoom · Esc to close</p>
+  </div>
+
+  <footer class="foot">
+    <div class="wrap foot-inner">
+      <span class="brand small"><svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><use href="#mark"/></svg><span>small<b>peg</b></span></span>
+      <span>Written in Rust from ITU-T T.81, compiled to WebAssembly for this page. MIT OR Apache-2.0.</span>
+    </div>
+  </footer>
+
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="mark" viewBox="0 0 32 32">
+      <rect x="3" y="3" width="26" height="26" rx="7" fill="var(--accent)"/>
+      <rect class="c" x="8" y="8" width="7" height="7" rx="1.5"/>
+      <rect class="c" x="18" y="9.25" width="4.5" height="4.5" rx="1" opacity=".8"/>
+      <rect class="c" x="9.25" y="18" width="4.5" height="4.5" rx="1" opacity=".8"/>
+      <rect class="c" x="19" y="19" width="2.5" height="2.5" rx=".6" opacity=".6"/>
+    </symbol>
+    <symbol id="i-photo" viewBox="0 0 48 48"><rect x="6" y="9" width="36" height="30" rx="4" fill="none" stroke="currentColor" stroke-width="2.5"/><circle cx="17" cy="19" r="3.2" fill="currentColor"/><path d="M7 33l10-10 8 8 6-6 10 10" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 20 20"><rect x="4" y="9" width="12" height="8" rx="2" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M7 9V6.5a3 3 0 0 1 6 0V9" fill="none" stroke="currentColor" stroke-width="1.7"/></symbol>
+    <symbol id="i-box" viewBox="0 0 20 20"><path d="M10 2.5l6.5 3.5v8L10 17.5 3.5 14V6z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M3.5 6L10 9.5 16.5 6M10 9.5v8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></symbol>
+    <symbol id="i-scale" viewBox="0 0 20 20"><path d="M10 3v14M5 17h10M3 7h14M5 7l-2.5 5a2.5 2.5 0 0 0 5 0zM15 7l-2.5 5a2.5 2.5 0 0 0 5 0z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></symbol>
+    <symbol id="i-down" viewBox="0 0 20 20"><path d="M10 3v10m-4.5-4.5L10 13l4.5-4.5M4 17h12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" rx="2" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M3.5 9.2h17M3.5 14.8h17M9.2 3.5v17M14.8 3.5v17" stroke="currentColor" stroke-width="1.5"/></symbol>
+    <symbol id="i-equal" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" rx="3" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M8 10h8M8 14h8" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></symbol>
+    <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.7"/><circle cx="9" cy="9.5" r="1.8" fill="currentColor"/><path d="M3.5 17l5-5 4 4 3-3 5 5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l7.5 3v5.5c0 4.5-3.2 8.2-7.5 9.5-4.3-1.3-7.5-5-7.5-9.5V6z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M8.8 12l2.3 2.3 4.2-4.6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  </svg>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
