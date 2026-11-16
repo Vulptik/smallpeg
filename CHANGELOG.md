@@ -14,7 +14,8 @@ No code changes; the encoder's output is identical to 0.13.0.
 - `#![forbid(unsafe_code)]`: the crate already used no `unsafe`; now the
   compiler enforces it.
 - Releases are published from GitHub Actions with trusted publishing, so
-  no registry token is stored.
+  no registry token is stored. npm versions are staged by the workflow and
+  go live after a maintainer approves them with 2FA.
 
 ## 0.13.0
 
