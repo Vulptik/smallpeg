@@ -8,6 +8,7 @@ rust-version = "1.88"
 description = "A from-scratch, dependency-free JPEG encoder in pure Rust: trellis quantization, optimized progressive scans, optimized Huffman tables, AAN DCT, Lanczos3 resize."
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/sawapi/smallpeg"
+homepage = "https://sawapi.github.io/smallpeg/"
 readme = "README.md"
 keywords = ["jpeg", "encoder", "image", "compression"]
 categories = ["multimedia::images", "compression"]
