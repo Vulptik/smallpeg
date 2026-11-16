@@ -41,7 +41,7 @@
     "url": "git+https://github.com/sawapi/smallpeg.git",
     "directory": "npm"
   },
-  "homepage": "https://github.com/sawapi/smallpeg",
+  "homepage": "https://sawapi.github.io/smallpeg/",
   "bugs": {
     "url": "https://github.com/sawapi/smallpeg/issues"
   },
