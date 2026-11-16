@@ -4,6 +4,10 @@ name: Publish
 # the workflow runs on. Both registries use trusted publishing (OIDC): each
 # lists this workflow as a trusted publisher, so no registry token is stored.
 #
+# npm: the trusted publisher may only stage. The job runs `npm stage
+# publish`, and the version goes live when a maintainer approves it with
+# 2FA (npmjs.com, Staged Packages; or `npm stage approve <id>`).
+#
 # The check job tests everything, packs the npm tarball, smoke-tests it and
 # records its sha512. Only the publish jobs can request an OIDC token, and
 # the npm job publishes exactly the tarball the check job hashed. With
@@ -161,10 +165,18 @@ jobs:
           fi
           echo "TARBALL=$tarball" >> "$GITHUB_ENV"
 
-      # Trusted publishing: npm authenticates with this job's OIDC token and
-      # attaches provenance on its own.
-      - name: Publish smallpeg ${{ needs.check.outputs.version }}
-        if: ${{ !inputs.dry-run }}
+      # `npm stage` needs npm 11.15 or later.
+      - name: Check npm
         run: |
-          npm --version
-          npm publish "$TARBALL" --access public
+          v=$(npm --version)
+          echo "npm $v"
+          if [ "$(printf '%s\n' 11.15.0 "$v" | sort -V | head -1)" != 11.15.0 ]; then
+            echo "npm $v cannot stage; 11.15.0 or later is required" >&2
+            exit 1
+          fi
+
+      # Trusted publishing: npm authenticates with this job's OIDC token and
+      # attaches provenance on its own. The version waits for approval.
+      - name: Stage smallpeg ${{ needs.check.outputs.version }}
+        if: ${{ !inputs.dry-run }}
+        run: npm stage publish "$TARBALL" --access public
