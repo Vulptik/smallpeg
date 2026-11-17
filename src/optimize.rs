@@ -15,10 +15,11 @@
 //! this parser. It parses hostile input, so every read is bounds-checked
 //! and every failure returns `None`.
 
-use crate::{
-    BitWriter, Component, HuffTable, build_huff_table, ceil_div, emit_dht,
-    encode_progressive_scans, for_each_symbol, interleave_order,
-};
+use crate::ceil_div;
+use crate::component::{Component, interleave_order};
+use crate::huffman::{BitWriter, HuffTable, build_huff_table, emit_dht};
+use crate::progressive::encode_progressive_scans;
+use crate::symbols::for_each_symbol;
 
 /// Cap on total allocated coefficient blocks (~1 GiB of coefficients),
 /// so a forged SOF header cannot demand an absurd allocation.

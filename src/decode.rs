@@ -7,8 +7,8 @@
 //! decoders apply by default, so decoded images match mainstream decoders rather
 //! than showing replication blockiness at chroma edges.
 
-use crate::ZIGZAG;
 use crate::optimize::{Limits, Parsed, parse_and_decode};
+use crate::quant::ZIGZAG;
 
 /// A decoded grayscale or RGB JPEG; see [`decode_jpeg`].
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -381,7 +381,8 @@ pub(crate) fn idct8x8(f: &[f32; 64], basis: &[[f32; 8]; 8]) -> [f32; 64] {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Encoder, Sampling, dequant_scale, fdct8x8};
+    use crate::dct::{dequant_scale, fdct8x8};
+    use crate::{Encoder, Sampling};
 
     fn test_rgb(w: u32, h: u32) -> Vec<u8> {
         let mut v = Vec::with_capacity((w * h * 3) as usize);

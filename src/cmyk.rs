@@ -19,12 +19,15 @@
 //! the two can never disagree. Passing the decoded [`CmykImage::adobe`]
 //! back keeps the inversion convention readers will assume unchanged.
 
+use crate::component::{Component, interleave_order};
+use crate::dct::dequant_scale;
 use crate::decode::{Upsampler, sample_planes, ycc_row};
 use crate::dering::Dering;
+use crate::document::encode_document;
 use crate::optimize::{Limits, parse_and_decode};
+use crate::quant::scaled_quant_table;
 use crate::{
-    Component, Encoder, HF_BLEND_MAX, QuantPreset, Sampling, ceil_div, compress_luma_table,
-    dequant_scale, encode_document, interleave_order, is_gradient, scaled_quant_table,
+    Encoder, HF_BLEND_MAX, QuantPreset, Sampling, ceil_div, compress_luma_table, is_gradient,
 };
 
 /// Components deringed by default (bit i = component i): none. Measured
