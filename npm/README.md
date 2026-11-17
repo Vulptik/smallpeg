@@ -1,86 +1,84 @@
 # smallpeg
 
-A JPEG encoder, lossless optimizer and decoder written from the JPEG
-standard in Rust, compiled to WebAssembly for Node and the browser. No
-dependencies and no native binaries: about 190 KB of WebAssembly plus a
-small TypeScript-typed API.
+[![npm](https://img.shields.io/npm/v/smallpeg.svg)](https://www.npmjs.com/package/smallpeg)
+[![CI](https://github.com/sawapi/smallpeg/actions/workflows/ci.yml/badge.svg)](https://github.com/sawapi/smallpeg/actions/workflows/ci.yml)
+[![license](https://img.shields.io/npm/l/smallpeg.svg)](#license)
 
-- **Encode** gray, RGB or RGBA pixels (for example from a canvas) with
-  trellis quantization, per-image Huffman tables and optimized progressive
-  scans.
-- **Optimize** an existing JPEG without changing a pixel.
-- **Strip metadata** such as EXIF and GPS position, keeping the color
-  profile and orientation.
-- **Decode**, read the header, fix EXIF orientation, crop and resize
-  (Lanczos3, optionally in linear light).
+A JPEG encoder, lossless optimizer and decoder for Node and the browser,
+compiled to WebAssembly from a dependency-free Rust library, with
+TypeScript types.
+
+[Website](https://sawapi.github.io/smallpeg/) ·
+[API](https://github.com/sawapi/smallpeg/blob/main/docs/npm-api.md) ·
+[GitHub](https://github.com/sawapi/smallpeg) ·
+[Changelog](https://github.com/sawapi/smallpeg/blob/main/CHANGELOG.md)
+
+## Install
+
+```sh
+npm install smallpeg
+```
 
 ## Node
 
 ```js
-import { encode, optimize, stripMetadata } from "smallpeg";
+import { encode, optimize } from "smallpeg";
 import { readFileSync, writeFileSync } from "node:fs";
 
 // data: width * height * channels bytes (1 gray, 3 RGB, 4 RGBA)
 const jpeg = encode({ data: rgb, width, height }, { quality: 80 });
 
-// same pixels, fewer bytes (compare lengths: an optimized file may not shrink)
+// Same pixels, fewer bytes (an already optimized file may not shrink).
 const input = readFileSync("photo.jpg");
 const smaller = optimize(input);
 if (smaller && smaller.length < input.length) writeFileSync("photo.jpg", smaller);
-
-// remove EXIF, GPS and XMP
-const clean = stripMetadata(input);
 ```
 
-`require("smallpeg")` works too (Node 22.12 or later). The package is ES
-modules, so TypeScript code compiled to CommonJS needs `"module":
-"nodenext"` and TypeScript 5.8 or later to import it.
-
-## Browser and bundlers
-
-The browser build has to load its `.wasm` before use:
+## Browser
 
 ```js
 import { init, encode } from "smallpeg/web";
 
-await init(); // fetches web/smallpeg_wasm_bg.wasm from the package
+await init(); // loads the .wasm file once
 const jpeg = encode(ctx.getImageData(0, 0, w, h)); // RGBA, alpha onto white
 const blob = new Blob([jpeg], { type: "image/jpeg" });
 ```
 
-Bundlers that resolve `"smallpeg"` for the browser get the same build, so
-`init()` is needed there as well; in Node it is a no-op, which lets shared
-code always call it. Run encoding in a Web Worker for large images: it is
-synchronous.
+Encoding is synchronous; for large images, run it in a Web Worker.
 
-## API
+## Features
 
-Images are plain objects, `{ data, width, height, channels }`: `data` holds
-`width * height * channels` bytes, interleaved, top row first. A canvas
-`ImageData` fits as is. `channels` is 1 (gray), 3 (RGB) or 4 (RGBA); when
-you pass an image in, it can be left out and is worked out from the length
-of `data`. Images that come back can be passed straight to the next call.
+- **Encode** gray, RGB or RGBA pixels, such as a canvas `ImageData`.
+- **Optimize** an existing JPEG losslessly: same pixels, fewer bytes.
+- **Strip metadata** such as EXIF and GPS position, keeping the color
+  profile and orientation.
+- **Decode**, read the header, fix EXIF orientation, crop and resize.
+- **Handle untrusted input**: functions that read JPEG bytes return
+  `undefined` for anything they cannot handle.
 
 | Function | Returns |
 |---|---|
-| `encode(image, { quality = 80, fullColor = false })` | JPEG bytes. 4 channels are RGBA, flattened onto white. `fullColor` keeps chroma at full resolution (4:4:4) |
-| `optimize(jpeg, { baseline = false })` | Re-coded JPEG with identical pixels, or `undefined` if the file cannot be re-coded |
+| `encode(image, { quality, fullColor })` | JPEG bytes |
+| `optimize(jpeg, { baseline })` | Re-coded JPEG with identical pixels, or `undefined` |
 | `stripMetadata(jpeg)` | JPEG without metadata, or `undefined` |
 | `info(jpeg)` | `{ width, height, components, progressive, orientation }`, or `undefined` |
-| `decode(jpeg)` | Image (gray or RGB, as stored), or `undefined` |
-| `applyOrientation(image, orientation)` | Upright image; use `info(jpeg).orientation` |
-| `resize(image, width, height, { linear = false })` | Resized image (Lanczos3). `linear` filters in linear light |
-| `crop(image, { x, y, width, height })` | Cropped image, or `undefined` if the rectangle is not inside the image |
-| `fitWithin(width, height, maxWidth, maxHeight)` | `[width, height]` that fits, keeping the aspect ratio; never enlarges |
+| `decode(jpeg)` | Image (gray or RGB), or `undefined` |
+| `applyOrientation(image, orientation)` | Upright image |
+| `resize(image, width, height, { linear })` | Resized image |
+| `crop(image, { x, y, width, height })` | Cropped image, or `undefined` |
+| `fitWithin(width, height, maxWidth, maxHeight)` | `[width, height]` that fits |
+| `init(wasm?)`, `initSync(bytes)` | Load the WebAssembly module (browser build; no-ops in Node) |
 
-Functions that read JPEG bytes accept untrusted input and return
-`undefined` for anything they cannot handle. Pixel data whose length does
-not match its dimensions, and sizes or coordinates that are not whole
-numbers, throw an `Error`. Returned bytes are fresh copies backed by an
-`ArrayBuffer`, so they can go straight into a `Blob`. TypeScript types are
-included (TypeScript 5.7 or later).
+Images are plain `{ data, width, height, channels }` objects, and every
+image a function returns can be passed to the next. Details, options and
+errors are in the [API documentation](https://github.com/sawapi/smallpeg/blob/main/docs/npm-api.md).
+
+## Requirements
+
+Node 22.12 or later, or a current browser (directly or through a bundler).
+TypeScript types need TypeScript 5.7 or later.
 
 ## License
 
-MIT OR Apache-2.0, at your option. The Rust crate is
-[`smallpeg`](https://crates.io/crates/smallpeg).
+MIT OR Apache-2.0, at your option. The Rust library is
+[`smallpeg` on crates.io](https://crates.io/crates/smallpeg).
