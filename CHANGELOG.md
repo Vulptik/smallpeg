@@ -3,7 +3,10 @@
 Notable changes per version. 0.13.0 is the first published release; the
 entries before it record development that preceded publication.
 
-## Unreleased
+## 0.14.0
+
+The Rust API is unchanged, and so is the encoder's output. The npm
+package's JavaScript API changes (breaking); see below.
 
 - Progressive encoding is about 1.6x faster (an 8-megapixel photo at
   quality 80: 335 ms to 210 ms, one thread). The output is byte-identical:
@@ -37,6 +40,9 @@ entries before it record development that preceded publication.
   package is now ES modules; `require()` needs Node 22.12 or later.
 - npm package: built with wasm-bindgen 0.2.127. Decoded pixels are moved
   out of WebAssembly instead of copied twice.
+- Documentation: the README and the npm README are short (install,
+  example, features, links), and the details moved to `docs/`: a guide,
+  color profiles, how the encoder works, and the JavaScript API.
 
 ## 0.13.1
 

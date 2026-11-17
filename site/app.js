@@ -382,6 +382,40 @@ peek.addEventListener("keydown", (e) => { if (e.key === " " || e.key === "Enter"
 peek.addEventListener("keyup", () => hold(false));
 peek.addEventListener("blur", () => hold(false));
 
+// ---- syntax colors --------------------------------------------------------
+// A small tokenizer for the Rust and JavaScript samples: enough to color
+// comments, strings, numbers, keywords, function names and types. The
+// text itself is unchanged, so copying still gets the plain code.
+const KEYWORDS = new Set(
+  ("as async await break const continue else enum fn for from if impl import in let " +
+    "loop match mod move mut new pub return self static struct true false use where while " +
+    "export function type typeof void null undefined").split(" "),
+);
+const TOKEN =
+  /(\/\/[^\n]*|\/\*[\s\S]*?\*\/)|("(?:[^"\\\n]|\\.)*"|`(?:[^`\\]|\\.)*`|'(?:[^'\\\n]|\\.)*'(?!\w))|(\b(?:0x[\da-fA-F_]+|\d[\d_]*(?:\.\d+)?(?:[eE][+-]?\d+)?)\b)|([A-Za-z_]\w*)(?=\s*(?:!\s*)?[(\[])|([A-Za-z_]\w*)/g;
+// Rust's primitive types read as types, like the capitalized ones.
+const PRIMITIVES = new Set("u8 u16 u32 u64 usize i8 i16 i32 i64 isize f32 f64 bool char str".split(" "));
+const esc = (t) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+function highlight(code) {
+  const text = code.textContent;
+  let html = "";
+  let last = 0;
+  for (const m of text.matchAll(TOKEN)) {
+    html += esc(text.slice(last, m.index));
+    const [tok, comment, str, num, call, word] = m;
+    const name = call || word;
+    const cls = comment ? "c" : str ? "s" : num ? "n"
+      : /^[A-Z]/.test(name) || PRIMITIVES.has(name) ? "t" // types, and Some(...) / Ok(...)
+      : KEYWORDS.has(name) && !(call && name === "new") && !/^\s*:(?!:)/.test(text.slice(m.index + tok.length))
+        ? "k" // not Encoder::new() (a call) or { type: ... } (a key)
+      : call ? "f" : "";
+    html += cls ? `<span class="${cls}">${esc(tok)}</span>` : esc(tok);
+    last = m.index + tok.length;
+  }
+  code.innerHTML = html + esc(text.slice(last));
+}
+for (const code of document.querySelectorAll(".code-card pre code")) highlight(code);
+
 // ---- code tabs ----------------------------------------------------------
 // Each code card has its own tab set.
 for (const card of document.querySelectorAll(".code-card")) {

@@ -187,6 +187,7 @@ const MAX_PIXELS = 100_000_000;
 /** A value for an error message: strings quoted, everything else as is. */
 function show(v: unknown): string {
   if (typeof v === "string") return JSON.stringify(v);
+  if (Array.isArray(v)) return "an array";
   try {
     return String(v);
   } catch {

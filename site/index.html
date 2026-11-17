@@ -230,8 +230,12 @@ fn shrink(photo: &amp;[u8]) -&gt; Option&lt;Vec&lt;u8&gt;&gt; {
         &amp;img.pixels, img.width, img.height, img.channels as usize, info.orientation,
     );
     let (nw, nh) = smallpeg::fit_within(w, h, 1600, 1600);
-    let small = smallpeg::resize_rgb_linear(&amp;px, w, h, nw, nh);
-    Some(smallpeg::Encoder::new(80).encode_rgb(&amp;small, nw, nh))
+    let enc = smallpeg::Encoder::new(80);
+    Some(if img.channels == 1 {
+        enc.encode_gray(&amp;smallpeg::resize_gray_linear(&amp;px, w, h, nw, nh), nw, nh)
+    } else {
+        enc.encode_rgb(&amp;smallpeg::resize_rgb_linear(&amp;px, w, h, nw, nh), nw, nh)
+    })
 }</code></pre>
           <pre role="tabpanel" id="ex-opt" aria-labelledby="tab-opt" hidden><code><span class="c">// same pixels, fewer bytes</span>
 if let Some(opt) = smallpeg::optimize_jpeg(&amp;jpeg) {
@@ -248,7 +252,7 @@ let clean = smallpeg::strip_metadata(&amp;jpeg);</code></pre>
           <h3>JavaScript</h3>
           <div class="install"><code>npm install smallpeg</code><button class="copy-cmd" type="button" data-copy="npm install smallpeg">Copy</button></div>
         </div>
-        <p class="lang-note">Node 22.12 or later, and current browsers through any bundler. One WebAssembly file of about 190 KB, no native binaries, TypeScript types included. The full API is in the <a href="https://www.npmjs.com/package/smallpeg">package README</a>.</p>
+        <p class="lang-note">Node 22.12 or later, and current browsers through any bundler. One WebAssembly file of about 190 KB, no native binaries, TypeScript types included. The full API is in the <a href="https://github.com/sawapi/smallpeg/blob/main/docs/npm-api.md">JavaScript API documentation</a>.</p>
         <div class="code-card">
           <div class="tabs" role="tablist" aria-label="JavaScript examples">
             <button role="tab" aria-selected="true" aria-controls="ex-node" id="tab-node">Node</button>
