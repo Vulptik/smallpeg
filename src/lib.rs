@@ -1466,12 +1466,17 @@ fn for_each_ac_refine_symbol_sparse(
             }
         };
     }
+    // Scratch buffers reused across blocks (cleared per block).
+    let mut ents: Vec<(usize, i32)> = Vec::with_capacity(64);
+    let mut corr: Vec<u16> = Vec::with_capacity(64);
     for w in s.offsets.windows(2) {
-        let ents: Vec<(usize, i32)> = s.entries[w[0] as usize..w[1] as usize]
-            .iter()
-            .filter(|&&(k, _)| (k as usize) >= ss && (k as usize) <= se)
-            .map(|&(k, v)| (k as usize, v as i32))
-            .collect();
+        ents.clear();
+        ents.extend(
+            s.entries[w[0] as usize..w[1] as usize]
+                .iter()
+                .filter(|&&(k, _)| (k as usize) >= ss && (k as usize) <= se)
+                .map(|&(k, v)| (k as usize, v as i32)),
+        );
         let mut last_sig: Option<usize> = None;
         for &(k, v) in &ents {
             let a = v.unsigned_abs();
@@ -1484,13 +1489,16 @@ fn for_each_ac_refine_symbol_sparse(
             Some(ls) => {
                 flush_eobrun!();
                 let mut run = 0u32;
-                let mut corr: Vec<u16> = Vec::new();
+                corr.clear();
                 let mut pos = ss; // next position to account for
                 for &(k, v) in ents.iter().filter(|&&(k, _)| k <= ls) {
                     let a = v.unsigned_abs();
                     // true zeros in the gap [pos, k)
-                    for _ in pos..k {
-                        run += 1;
+                    let mut gap = (k - pos) as u32;
+                    while gap > 0 {
+                        let take = gap.min(16 - run);
+                        run += take;
+                        gap -= take;
                         if run == 16 {
                             f(Some(0xF0), 0, 0);
                             for &b in &corr {
@@ -1545,29 +1553,18 @@ fn for_each_ac_refine_symbol_sparse(
 /// Cost statistics of one band for al = 0, 1, 2 in a single sparse pass:
 /// returns per-al (symbol freq table, amplitude-bit payload). Exactly the
 /// same counts as three separate `for_each_ac_band_symbol_sparse` passes.
+#[cfg(test)]
 fn ac_band_stats_all_al(s: &SparseAc, ss: usize, se: usize) -> [([u32; 256], u64); 3] {
+    ac_band_stats_multi(s, &[(ss, se)]).pop().unwrap()
+}
+
+/// `ac_band_stats_all_al` for several bands in one walk over the blocks.
+fn ac_band_stats_multi(s: &SparseAc, bands: &[(usize, usize)]) -> Vec<[([u32; 256], u64); 3]> {
     struct St {
         freq: [u32; 256],
         payload: u64,
         eobrun: u32,
     }
-    let mut st = [
-        St {
-            freq: [0; 256],
-            payload: 0,
-            eobrun: 0,
-        },
-        St {
-            freq: [0; 256],
-            payload: 0,
-            eobrun: 0,
-        },
-        St {
-            freq: [0; 256],
-            payload: 0,
-            eobrun: 0,
-        },
-    ];
     #[inline]
     fn flush(st: &mut St) {
         if st.eobrun > 0 {
@@ -1577,54 +1574,73 @@ fn ac_band_stats_all_al(s: &SparseAc, ss: usize, se: usize) -> [([u32; 256], u64
             st.eobrun = 0;
         }
     }
+    let nb = bands.len();
+    let mut st: Vec<[St; 3]> = (0..nb)
+        .map(|_| {
+            std::array::from_fn(|_| St {
+                freq: [0; 256],
+                payload: 0,
+                eobrun: 0,
+            })
+        })
+        .collect();
+    let mut last = vec![[0usize; 3]; nb];
+    let mut first = vec![[true; 3]; nb];
     for w in s.offsets.windows(2) {
         let ents = &s.entries[w[0] as usize..w[1] as usize];
-        let mut last = [ss - 1; 3];
-        let mut first = [true; 3];
+        for (b, &(ss, _)) in bands.iter().enumerate() {
+            last[b] = [ss - 1; 3];
+            first[b] = [true; 3];
+        }
         for &(kp, v) in ents {
             let k = kp as usize;
-            if k < ss || k > se {
-                continue;
-            }
             let a = (v as i32).unsigned_abs();
-            for al in 0..3usize {
-                let mag = (a >> al) as i32;
-                if mag == 0 {
+            for (b, &(ss, se)) in bands.iter().enumerate() {
+                if k < ss || k > se {
                     continue;
                 }
-                let stx = &mut st[al];
-                if first[al] {
-                    flush(stx);
-                    first[al] = false;
+                for al in 0..3usize {
+                    let mag = (a >> al) as i32;
+                    if mag == 0 {
+                        break; // larger shifts are zero too
+                    }
+                    let stx = &mut st[b][al];
+                    if first[b][al] {
+                        flush(stx);
+                        first[b][al] = false;
+                    }
+                    let mut run = (k - last[b][al] - 1) as u32;
+                    while run > 15 {
+                        stx.freq[0xF0] += 1;
+                        run -= 16;
+                    }
+                    let sz = category(mag);
+                    stx.freq[((run as usize) << 4) | sz as usize] += 1;
+                    stx.payload += sz as u64;
+                    last[b][al] = k;
                 }
-                let mut run = (k - last[al] - 1) as u32;
-                while run > 15 {
-                    stx.freq[0xF0] += 1;
-                    run -= 16;
-                }
-                let sz = category(mag);
-                stx.freq[((run as usize) << 4) | sz as usize] += 1;
-                stx.payload += sz as u64;
-                last[al] = k;
             }
         }
-        for al in 0..3usize {
-            if last[al] < se {
-                st[al].eobrun += 1;
-                if st[al].eobrun == 32767 {
-                    flush(&mut st[al]);
+        for (b, &(_, se)) in bands.iter().enumerate() {
+            for al in 0..3usize {
+                if last[b][al] < se {
+                    let stx = &mut st[b][al];
+                    stx.eobrun += 1;
+                    if stx.eobrun == 32767 {
+                        flush(stx);
+                    }
                 }
             }
         }
     }
-    for stx in st.iter_mut() {
-        flush(stx);
-    }
-    [
-        (st[0].freq, st[0].payload),
-        (st[1].freq, st[1].payload),
-        (st[2].freq, st[2].payload),
-    ]
+    st.into_iter()
+        .map(|mut sts| {
+            for stx in sts.iter_mut() {
+                flush(stx);
+            }
+            sts.map(|x| (x.freq, x.payload))
+        })
+        .collect()
 }
 
 // ---------------------------------------------------------------- trellis
@@ -2287,29 +2303,48 @@ fn encode_document(
     };
 
     // Baseline candidate: one interleaved scan.
-    let baseline = {
-        let mut out = head.clone();
-        emit_sof(&mut out, 0xC0);
-        let mut freqs = vec![[0u32; 256]; n_tables];
-        for_each_symbol(&comps, order, |tbl, sym, _n, _bits| {
-            freqs[tbl][sym as usize] += 1;
-        });
-        let tables: Vec<HuffTable> = freqs.iter().map(build_huff_table).collect();
-        for (id, t) in tables.iter().enumerate() {
-            emit_dht(&mut out, (id & 1) as u8, (id / 2) as u8, t);
-        }
-        let sos_len = 6 + 2 * comps.len() as u16;
-        out.extend_from_slice(&[0xFF, 0xDA]);
-        out.extend_from_slice(&sos_len.to_be_bytes());
-        out.push(comps.len() as u8);
-        for (i, c) in comps.iter().enumerate() {
-            out.push(i as u8 + 1);
-            let dc = c.table_class as u8;
-            let ac = c.table_class as u8;
-            out.push((dc << 4) | ac);
-        }
-        out.extend_from_slice(&[0x00, 0x3F, 0x00]);
+    // Baseline candidate: header and tables first, plus its exact entropy
+    // bit count, so the scan data is only written when it can still win.
+    let mut base_head = head.clone();
+    emit_sof(&mut base_head, 0xC0);
+    let mut freqs = vec![[0u32; 256]; n_tables];
+    let mut payload = 0u64;
+    for_each_symbol(&comps, order, |tbl, sym, n, _bits| {
+        freqs[tbl][sym as usize] += 1;
+        payload += n as u64;
+    });
+    let tables: Vec<HuffTable> = freqs.iter().map(build_huff_table).collect();
+    for (id, t) in tables.iter().enumerate() {
+        emit_dht(&mut base_head, (id & 1) as u8, (id / 2) as u8, t);
+    }
+    let sos_len = 6 + 2 * comps.len() as u16;
+    base_head.extend_from_slice(&[0xFF, 0xDA]);
+    base_head.extend_from_slice(&sos_len.to_be_bytes());
+    base_head.push(comps.len() as u8);
+    for (i, c) in comps.iter().enumerate() {
+        base_head.push(i as u8 + 1);
+        let dc = c.table_class as u8;
+        let ac = c.table_class as u8;
+        base_head.push((dc << 4) | ac);
+    }
+    base_head.extend_from_slice(&[0x00, 0x3F, 0x00]);
+    let code_bits: u64 = freqs
+        .iter()
+        .zip(&tables)
+        .map(|(f, t)| {
+            f.iter()
+                .zip(&t.codes)
+                .map(|(&n, &(_, len))| n as u64 * len as u64)
+                .sum::<u64>()
+        })
+        .sum();
+    // Byte stuffing only adds bytes, so this never exceeds the real length.
+    let baseline_min_len = base_head.len() + (code_bits + payload).div_ceil(8) as usize + 2;
+    let render_baseline = |out: Vec<u8>| -> Vec<u8> {
         let mut writer = BitWriter::new(out);
+        writer
+            .out
+            .reserve((code_bits + payload).div_ceil(8) as usize * 101 / 100 + 64);
         for_each_symbol(&comps, order, |tbl, sym, n, bits| {
             let (code, len) = tables[tbl].codes[sym as usize];
             writer.put(code, len);
@@ -2321,7 +2356,7 @@ fn encode_document(
         out
     };
     if !progressive {
-        return baseline;
+        return render_baseline(base_head);
     }
 
     // Progressive candidate: succeeds on photographic content, can lose on
@@ -2331,6 +2366,10 @@ fn encode_document(
     let mut prog_head = head;
     emit_sof(&mut prog_head, 0xC2);
     let prog = encode_progressive_scans(&comps, order, prog_head);
+    if prog.len() <= baseline_min_len {
+        return prog;
+    }
+    let baseline = render_baseline(base_head);
     if prog.len() <= baseline.len() {
         prog
     } else {
@@ -2347,9 +2386,11 @@ fn emit_dht(out: &mut Vec<u8>, class: u8, dest: u8, t: &HuffTable) {
     out.extend_from_slice(&t.values);
 }
 
+/// Each Huffman-coded scan carries the symbol statistics the scan search
+/// already measured, so emission is a single pass.
 enum ScanSpec {
     /// Interleaved DC scan, Ah = 0, point transform `al`.
-    DcFirst { al: u8 },
+    DcFirst { al: u8, freqs: Vec<[u32; 256]> },
     /// Interleaved DC refinement: one raw bit per block, no Huffman data.
     DcRefine { al: u8 },
     /// Single-component AC band, Ah = 0, point transform `al`.
@@ -2358,6 +2399,7 @@ enum ScanSpec {
         ss: usize,
         se: usize,
         al: u8,
+        freq: [u32; 256],
     },
     /// Single-component AC refinement, Ah = al + 1.
     AcRefine {
@@ -2365,6 +2407,7 @@ enum ScanSpec {
         ss: usize,
         se: usize,
         al: u8,
+        freq: [u32; 256],
     },
 }
 
@@ -2407,7 +2450,7 @@ fn encode_progressive_scans(
     // DC: choose the point transform by measured cost. A refinement level
     // costs exactly one raw bit per block plus a scan header.
     let n_dc = comps.iter().map(|c| c.table_class).max().unwrap_or(0) + 1;
-    let dc_cost = |al: u8| -> u64 {
+    let dc_cost = |al: u8| -> (u64, Vec<[u32; 256]>) {
         let mut freqs = vec![[0u32; 256]; n_dc];
         let mut payload = 0u64;
         for_each_dc_symbol(comps, order, al, |tbl, sym, n, _| {
@@ -2417,14 +2460,19 @@ fn encode_progressive_scans(
         let mut bits: u64 = freqs.iter().map(|f| table_bits(f, 0)).sum();
         bits += payload;
         bits += al as u64 * (order.len() as u64 + 12 * 8); // refinement scans
-        bits
+        (bits, freqs)
     };
-    let dc_al = if dc_cost(1) < dc_cost(0) { 1u8 } else { 0 };
+    let (dc0, dc1) = (dc_cost(0), dc_cost(1));
+    let (dc_al, dc_freqs) = if dc1.0 < dc0.0 {
+        (1u8, dc1.1)
+    } else {
+        (0, dc0.1)
+    };
 
     // AC per component: band split {no, yes} x point transform {0, 1, 2}.
     // Refinement cost per level is independent of the chain's top, so it
     // is measured once per level.
-    let ac_refine_cost = |ci: usize, al: u8| -> u64 {
+    let ac_refine_cost = |ci: usize, al: u8| -> (u64, [u32; 256]) {
         let mut freq = [0u32; 256];
         let mut payload = 0u64;
         for_each_ac_refine_symbol_sparse(&sparse[ci], 1, 63, al, |sym, n, _| {
@@ -2433,29 +2481,35 @@ fn encode_progressive_scans(
             }
             payload += n as u64;
         });
-        table_bits(&freq, payload)
+        (table_bits(&freq, payload), freq)
     };
 
-    let mut scans: Vec<ScanSpec> = vec![DcFirst { al: dc_al }];
+    let mut scans: Vec<ScanSpec> = vec![DcFirst {
+        al: dc_al,
+        freqs: dc_freqs,
+    }];
+    let mut refine_freqs: Vec<[[u32; 256]; 2]> = Vec::with_capacity(comps.len());
     let mut chain_al = vec![0u8; comps.len()];
     for ci in 0..comps.len() {
-        let refine: [u64; 2] = [ac_refine_cost(ci, 0), ac_refine_cost(ci, 1)];
+        let (r0, r1) = (ac_refine_cost(ci, 0), ac_refine_cost(ci, 1));
+        let refine: [u64; 2] = [r0.0, r1.0];
+        refine_freqs.push([r0.1, r1.1]);
         // Candidates: no split, or split the band at sp (low 1..=sp, high
         // sp+1..=63). Where the split lands matters a lot: smooth content
         // wants a tiny dense low band (1..=2) so the high band is almost
         // all EOB runs.
         let mut best = (u64::MAX, None::<usize>, 0u8);
         // One sparse pass per band covers all three point transforms.
-        let full_s = ac_band_stats_all_al(&sparse[ci], 1, 63);
-        let split_s: Vec<_> = [2usize, 5, 8]
+        const SPLITS: [usize; 3] = [2, 5, 8];
+        let mut bands = vec![(1usize, 63usize)];
+        for sp in SPLITS {
+            bands.extend([(1, sp), (sp + 1, 63)]);
+        }
+        let mut stats = ac_band_stats_multi(&sparse[ci], &bands).into_iter();
+        let full_s = stats.next().unwrap();
+        let split_s: Vec<_> = SPLITS
             .iter()
-            .map(|&sp| {
-                (
-                    sp,
-                    ac_band_stats_all_al(&sparse[ci], 1, sp),
-                    ac_band_stats_all_al(&sparse[ci], sp + 1, 63),
-                )
-            })
+            .map(|&sp| (sp, stats.next().unwrap(), stats.next().unwrap()))
             .collect();
         for al in 0u8..=2 {
             let tail: u64 = (0..al).map(|l| refine[l as usize]).sum();
@@ -2477,17 +2531,20 @@ fn encode_progressive_scans(
         chain_al[ci] = al;
         match split {
             Some(sp) => {
+                let (_, lo_s, hi_s) = split_s.iter().find(|s| s.0 == sp).unwrap();
                 scans.push(AcFirst {
                     ci,
                     ss: 1,
                     se: sp,
                     al,
+                    freq: lo_s[al as usize].0,
                 });
                 scans.push(AcFirst {
                     ci,
                     ss: sp + 1,
                     se: 63,
                     al,
+                    freq: hi_s[al as usize].0,
                 });
             }
             None => scans.push(AcFirst {
@@ -2495,6 +2552,7 @@ fn encode_progressive_scans(
                 ss: 1,
                 se: 63,
                 al,
+                freq: full_s[al as usize].0,
             }),
         }
     }
@@ -2511,6 +2569,7 @@ fn encode_progressive_scans(
                     ss: 1,
                     se: 63,
                     al: level,
+                    freq: refine_freqs[ci][level as usize],
                 });
             }
         }
@@ -2530,12 +2589,7 @@ fn encode_progressive_scans(
 
     for spec in scans {
         match spec {
-            DcFirst { al } => {
-                let n_dc = comps.iter().map(|c| c.table_class).max().unwrap_or(0) + 1;
-                let mut freqs = vec![[0u32; 256]; n_dc];
-                for_each_dc_symbol(comps, order, al, |tbl, sym, _n, _bits| {
-                    freqs[tbl][sym as usize] += 1;
-                });
+            DcFirst { al, freqs } => {
                 let tables: Vec<HuffTable> = freqs.iter().map(build_huff_table).collect();
                 for (dest, t) in tables.iter().enumerate() {
                     emit_dht(&mut out, 0, dest as u8, t);
@@ -2560,11 +2614,13 @@ fn encode_progressive_scans(
                 writer.flush();
                 out = writer.out;
             }
-            AcFirst { ci, ss, se, al } => {
-                let mut freq = [0u32; 256];
-                for_each_ac_band_symbol_sparse(&sparse[ci], ss, se, al, |sym, _n, _bits| {
-                    freq[sym as usize] += 1
-                });
+            AcFirst {
+                ci,
+                ss,
+                se,
+                al,
+                freq,
+            } => {
                 let t = build_huff_table(&freq);
                 emit_dht(&mut out, 1, 0, &t);
                 out.extend_from_slice(&[0xFF, 0xDA, 0x00, 0x08, 1, ci as u8 + 1, 0x00]);
@@ -2578,13 +2634,13 @@ fn encode_progressive_scans(
                 writer.flush();
                 out = writer.out;
             }
-            AcRefine { ci, ss, se, al } => {
-                let mut freq = [0u32; 256];
-                for_each_ac_refine_symbol_sparse(&sparse[ci], ss, se, al, |sym, _n, _bits| {
-                    if let Some(sym) = sym {
-                        freq[sym as usize] += 1;
-                    }
-                });
+            AcRefine {
+                ci,
+                ss,
+                se,
+                al,
+                freq,
+            } => {
                 let t = build_huff_table(&freq);
                 emit_dht(&mut out, 1, 0, &t);
                 out.extend_from_slice(&[0xFF, 0xDA, 0x00, 0x08, 1, ci as u8 + 1, 0x00]);

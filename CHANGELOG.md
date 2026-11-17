@@ -3,6 +3,14 @@
 Notable changes per version. 0.13.0 is the first published release; the
 entries before it record development that preceded publication.
 
+## Unreleased
+
+- Progressive encoding is about 1.6x faster (an 8-megapixel photo at
+  quality 80: 335 ms to 210 ms, one thread). The output is byte-identical:
+  the scan search's statistics are reused when writing, the baseline
+  candidate is only written when it can still be smaller, band statistics
+  take one pass, and refinement scans no longer allocate per block.
+
 ## 0.13.1
 
 No code changes; the encoder's output is identical to 0.13.0.
