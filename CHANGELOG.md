@@ -10,6 +10,33 @@ entries before it record development that preceded publication.
   the scan search's statistics are reused when writing, the baseline
   candidate is only written when it can still be smaller, band statistics
   take one pass, and refinement scans no longer allocate per block.
+- npm package: a TypeScript API replaces the generated bindings
+  (breaking). Images are plain `{ data, width, height, channels }`
+  objects that chain from one call to the next, `channels` is inferred
+  from the data length when left out, so a canvas `ImageData` encodes as
+  is, and options go in an object (`encode(image, { quality })`,
+  `resize(image, w, h, { linear })`, `crop(image, { x, y, width, height })`).
+  Results are plain objects with precise types (no `free()`), returned
+  bytes are typed `Uint8Array<ArrayBuffer>` so they work as a `BlobPart`
+  (the types need TypeScript 5.7 or later), and `fitWithin` returns a
+  `[width, height]` tuple. Sizes, coordinates and `quality` must be whole
+  numbers in range and throw an `Error` otherwise (a fractional size used
+  to be truncated, and `quality` above 255 wrapped around). Arguments of
+  the wrong kind throw a `TypeError`: JPEG bytes must be a `Uint8Array`,
+  pixel data a `Uint8Array` or `Uint8ClampedArray`, options an object and
+  flags booleans. Images have 1, 3 or 4 channels (`crop` used to take any
+  count and `applyOrientation` 1 to 4). An orientation must be a number
+  (a string such as `"6"` used to be converted); one outside 1 to 8
+  leaves the pixels as they are. `resize` refuses results over 100
+  megapixels with a `RangeError` instead of running out of memory.
+- npm package: the browser build exports `init` by name (still the
+  default export too) and throws a clear error when used before it. The
+  Node build has the same `init`, `initSync` and default export as no-ops,
+  so code shared between the two runs unchanged. The 0.13 init forms,
+  `init({ module_or_path })` and `initSync({ module })`, still work. The
+  package is now ES modules; `require()` needs Node 22.12 or later.
+- npm package: built with wasm-bindgen 0.2.127. Decoded pixels are moved
+  out of WebAssembly instead of copied twice.
 
 ## 0.13.1
 

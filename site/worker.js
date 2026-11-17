@@ -1,5 +1,5 @@
-// Runs the npm package's web build off the main thread.
-import init, { encode, optimize, stripMetadata, fitWithin, resize } from "./pkg/smallpeg_wasm.js";
+// Runs the npm package's browser entry off the main thread.
+import { init, encode, optimize, stripMetadata, fitWithin, resize } from "./pkg/dist/web.mjs";
 
 init().then(
   () => postMessage({ ready: true }),
@@ -9,20 +9,17 @@ init().then(
 function compress({ input, width, height, quality, fullChroma, maxSide }) {
   // Canvas pixels are RGBA; flatten alpha onto white, then reduce if asked.
   const rgba = new Uint8Array(input);
-  let rgb = new Uint8Array(width * height * 3);
+  const rgb = new Uint8Array(width * height * 3);
   for (let i = 0, j = 0; i < rgba.length; i += 4, j += 3) {
     const a = rgba[i + 3];
     for (let c = 0; c < 3; c++) rgb[j + c] = Math.round((rgba[i + c] * a + 255 * (255 - a)) / 255);
   }
-  let [w, h] = [width, height];
+  let image = { data: rgb, width, height, channels: 3 };
   if (maxSide > 0) {
-    const [nw, nh] = fitWithin(w, h, maxSide, maxSide);
-    if (nw !== w || nh !== h) {
-      rgb = resize(rgb, w, h, 3, nw, nh, true);
-      [w, h] = [nw, nh];
-    }
+    const [w, h] = fitWithin(width, height, maxSide, maxSide);
+    if (w !== width || h !== height) image = resize(image, w, h, { linear: true });
   }
-  return encode(rgb, w, h, 3, quality, fullChroma);
+  return encode(image, { quality, fullColor: fullChroma });
 }
 
 onmessage = ({ data }) => {

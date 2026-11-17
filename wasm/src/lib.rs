@@ -1,15 +1,19 @@
-//! JavaScript bindings for smallpeg, built into the npm package.
+//! wasm-bindgen bindings behind the npm package. They are an internal
+//! layer: the package's TypeScript API (npm/src) is what users call, and
+//! it converts these results into plain JavaScript values.
 //!
-//! Every entry point validates its arguments and reports a mismatch as a
-//! JavaScript `Error` instead of letting the library's assertions trap the
-//! WebAssembly instance. Functions that take untrusted JPEG bytes return
-//! `undefined` for input they cannot handle, like the Rust API's `None`.
+//! Every entry point still validates its arguments and reports a mismatch
+//! as a JavaScript `Error` instead of letting the library's assertions trap
+//! the WebAssembly instance. Functions that take untrusted JPEG bytes
+//! return `undefined` for input they cannot handle, like the Rust API's
+//! `None`.
 
 use wasm_bindgen::prelude::*;
 
 const DEFAULT_QUALITY: u8 = 80;
 
-/// Pixels plus their layout, returned by `decode` and `applyOrientation`.
+/// Decoded or transformed pixels. The TypeScript layer reads the fields,
+/// moves the pixels out with `take_pixels`, and frees it.
 #[wasm_bindgen]
 pub struct Image {
     width: u32,
@@ -20,33 +24,29 @@ pub struct Image {
 
 #[wasm_bindgen]
 impl Image {
-    /// Width in pixels.
     #[wasm_bindgen(getter)]
     pub fn width(&self) -> u32 {
         self.width
     }
 
-    /// Height in pixels.
     #[wasm_bindgen(getter)]
     pub fn height(&self) -> u32 {
         self.height
     }
 
-    /// 1 (gray) or 3 (RGB) for decoded JPEGs; whatever was passed in for
-    /// `applyOrientation`.
     #[wasm_bindgen(getter)]
     pub fn channels(&self) -> u8 {
         self.channels
     }
 
-    /// `width * height * channels` bytes, interleaved, top row first.
-    #[wasm_bindgen(getter)]
-    pub fn pixels(&self) -> Vec<u8> {
-        self.pixels.clone()
+    /// Moves the pixels out (no copy on the Rust side); a second call
+    /// returns an empty array.
+    pub fn take_pixels(&mut self) -> Vec<u8> {
+        std::mem::take(&mut self.pixels)
     }
 }
 
-/// Frame-header facts about a JPEG, returned by `info`.
+/// Frame-header facts, returned by `info`.
 #[wasm_bindgen]
 pub struct JpegInfo {
     width: u32,
@@ -58,31 +58,26 @@ pub struct JpegInfo {
 
 #[wasm_bindgen]
 impl JpegInfo {
-    /// Width in pixels.
     #[wasm_bindgen(getter)]
     pub fn width(&self) -> u32 {
         self.width
     }
 
-    /// Height in pixels.
     #[wasm_bindgen(getter)]
     pub fn height(&self) -> u32 {
         self.height
     }
 
-    /// 1 (gray), 3 (color) or 4 (CMYK / YCCK).
     #[wasm_bindgen(getter)]
     pub fn components(&self) -> u8 {
         self.components
     }
 
-    /// True for progressive files.
     #[wasm_bindgen(getter)]
     pub fn progressive(&self) -> bool {
         self.progressive
     }
 
-    /// EXIF orientation, 1..=8 (1 when the file has none).
     #[wasm_bindgen(getter)]
     pub fn orientation(&self) -> u8 {
         self.orientation
@@ -91,25 +86,28 @@ impl JpegInfo {
 
 fn check_pixels(len: usize, width: u32, height: u32, channels: u32) -> Result<(), JsError> {
     if width == 0 || height == 0 {
-        return Err(JsError::new("width and height must be at least 1"));
+        return Err(JsError::new(
+            "smallpeg: width and height must be at least 1",
+        ));
     }
     let want = width as u64 * height as u64 * channels as u64;
     if len as u64 != want {
         return Err(JsError::new(&format!(
-            "expected {want} bytes for {width}x{height} with {channels} channel(s), got {len}"
+            "smallpeg: expected {want} bytes for {width}x{height} with {channels} channel(s), got {len}"
         )));
     }
     Ok(())
 }
 
-/// Encode pixels as a JPEG.
-///
-/// `channels` is 1 (gray), 3 (RGB) or 4 (RGBA, as from a canvas; alpha is
-/// flattened onto white). `quality` is 1..=100 (default 80). `fullColor`
-/// keeps chroma at full resolution (4:4:4) instead of halving it (4:2:0):
-/// sharper colored text and lines, larger files. Both dimensions must be at
-/// most 65535.
-#[allow(non_snake_case)] // parameter names are the JavaScript ones
+fn check_channels(channels: u32) -> Result<(), JsError> {
+    if matches!(channels, 1 | 3 | 4) {
+        Ok(())
+    } else {
+        Err(JsError::new("smallpeg: channels must be 1, 3 or 4"))
+    }
+}
+
+/// Encode pixels; 4 channels are RGBA, flattened onto white.
 #[wasm_bindgen]
 pub fn encode(
     pixels: &[u8],
@@ -117,16 +115,16 @@ pub fn encode(
     height: u32,
     channels: u32,
     quality: Option<u8>,
-    fullColor: Option<bool>,
+    full_color: Option<bool>,
 ) -> Result<Vec<u8>, JsError> {
-    if !matches!(channels, 1 | 3 | 4) {
-        return Err(JsError::new("channels must be 1, 3 or 4"));
-    }
+    check_channels(channels)?;
     check_pixels(pixels.len(), width, height, channels)?;
     if width > 65535 || height > 65535 {
-        return Err(JsError::new("JPEG dimensions are limited to 65535"));
+        return Err(JsError::new(
+            "smallpeg: JPEG dimensions are limited to 65535",
+        ));
     }
-    let sampling = if fullColor.unwrap_or(false) {
+    let sampling = if full_color.unwrap_or(false) {
         smallpeg::Sampling::S444
     } else {
         smallpeg::Sampling::S420
@@ -148,30 +146,21 @@ pub fn encode(
     })
 }
 
-/// Make an existing JPEG smaller without changing a pixel. `undefined` if
-/// the file is not one this can re-code. The result can come out larger
-/// for files that are already optimized; compare lengths. `baseline`
-/// forces baseline sequential output (for targets that dislike
-/// progressive JPEGs, such as PDF embedding).
+/// Lossless re-coding; `baseline` forces sequential output.
 #[wasm_bindgen]
-pub fn optimize(jpeg: &[u8], baseline: Option<bool>) -> Option<Vec<u8>> {
-    if baseline.unwrap_or(false) {
+pub fn optimize(jpeg: &[u8], baseline: bool) -> Option<Vec<u8>> {
+    if baseline {
         smallpeg::optimize_jpeg_baseline(jpeg)
     } else {
         smallpeg::optimize_jpeg(jpeg)
     }
 }
 
-/// Remove EXIF (including GPS), XMP, comments and other metadata without
-/// touching the image data. Keeps the color profile and the photo's
-/// orientation. `undefined` if the file cannot be parsed.
-#[wasm_bindgen(js_name = stripMetadata)]
+#[wasm_bindgen]
 pub fn strip_metadata(jpeg: &[u8]) -> Option<Vec<u8>> {
     smallpeg::strip_metadata(jpeg)
 }
 
-/// Read a JPEG's frame header without decoding it. `undefined` if the
-/// bytes are not a JPEG this library understands.
 #[wasm_bindgen]
 pub fn info(jpeg: &[u8]) -> Option<JpegInfo> {
     smallpeg::jpeg_info(jpeg).map(|i| JpegInfo {
@@ -183,10 +172,6 @@ pub fn info(jpeg: &[u8]) -> Option<JpegInfo> {
     })
 }
 
-/// Decode a grayscale or color JPEG to 8-bit gray or RGB pixels, as
-/// stored (see `applyOrientation`). `undefined` for CMYK files, codings
-/// this library does not decode, malformed input, or frames over 100
-/// megapixels.
 #[wasm_bindgen]
 pub fn decode(jpeg: &[u8]) -> Option<Image> {
     smallpeg::decode_jpeg(jpeg).map(|d| Image {
@@ -197,10 +182,7 @@ pub fn decode(jpeg: &[u8]) -> Option<Image> {
     })
 }
 
-/// Turn decoded pixels upright for an EXIF orientation (1..=8; other
-/// values leave them as they are). Orientations 5 to 8 swap width and
-/// height.
-#[wasm_bindgen(js_name = applyOrientation)]
+#[wasm_bindgen]
 pub fn apply_orientation(
     pixels: &[u8],
     width: u32,
@@ -208,9 +190,7 @@ pub fn apply_orientation(
     channels: u32,
     orientation: u8,
 ) -> Result<Image, JsError> {
-    if !(1..=4).contains(&channels) {
-        return Err(JsError::new("channels must be 1 to 4"));
-    }
+    check_channels(channels)?;
     check_pixels(pixels.len(), width, height, channels)?;
     let (px, w, h) =
         smallpeg::apply_orientation(pixels, width, height, channels as usize, orientation);
@@ -222,12 +202,7 @@ pub fn apply_orientation(
     })
 }
 
-/// Resize with a Lanczos3 filter. `channels` is 1 (gray), 3 (RGB) or 4
-/// (any four-channel layout, each channel filtered independently).
-/// `linear` filters RGB or gray in linear light, which keeps fine
-/// light-and-dark detail from darkening when reducing; it assumes sRGB
-/// input and is not available for 4 channels.
-#[allow(non_snake_case)] // parameter names are the JavaScript ones
+/// Lanczos3 resize; `linear` filters gray or RGB in linear light.
 #[wasm_bindgen]
 #[allow(clippy::too_many_arguments)]
 pub fn resize(
@@ -235,30 +210,33 @@ pub fn resize(
     width: u32,
     height: u32,
     channels: u32,
-    newWidth: u32,
-    newHeight: u32,
-    linear: Option<bool>,
+    new_width: u32,
+    new_height: u32,
+    linear: bool,
 ) -> Result<Vec<u8>, JsError> {
+    check_channels(channels)?;
     check_pixels(pixels.len(), width, height, channels)?;
-    if newWidth == 0 || newHeight == 0 {
-        return Err(JsError::new("newWidth and newHeight must be at least 1"));
+    if new_width == 0 || new_height == 0 {
+        return Err(JsError::new(
+            "smallpeg: the new width and height must be at least 1",
+        ));
     }
-    let linear = linear.unwrap_or(false);
-    let (w, h, nw, nh) = (width, height, newWidth, newHeight);
+    let (w, h, nw, nh) = (width, height, new_width, new_height);
     Ok(match (channels, linear) {
         (1, false) => smallpeg::resize_gray(pixels, w, h, nw, nh),
         (1, true) => smallpeg::resize_gray_linear(pixels, w, h, nw, nh),
         (3, false) => smallpeg::resize_rgb(pixels, w, h, nw, nh),
         (3, true) => smallpeg::resize_rgb_linear(pixels, w, h, nw, nh),
-        (4, false) => smallpeg::resize_cmyk(pixels, w, h, nw, nh),
-        (4, true) => return Err(JsError::new("linear resizing takes 1 or 3 channels")),
-        _ => return Err(JsError::new("channels must be 1, 3 or 4")),
+        (_, false) => smallpeg::resize_cmyk(pixels, w, h, nw, nh),
+        (_, true) => {
+            return Err(JsError::new(
+                "smallpeg: linear resizing takes 1 or 3 channels",
+            ));
+        }
     })
 }
 
-/// Copy a rectangle out of pixels with any channel count. `undefined` if
-/// the rectangle is empty or not entirely inside the image.
-#[allow(non_snake_case)] // parameter names are the JavaScript ones
+/// `undefined` if the rectangle is empty or not entirely inside the image.
 #[wasm_bindgen]
 #[allow(clippy::too_many_arguments)]
 pub fn crop(
@@ -268,18 +246,16 @@ pub fn crop(
     channels: u32,
     x: u32,
     y: u32,
-    cropWidth: u32,
-    cropHeight: u32,
+    crop_width: u32,
+    crop_height: u32,
 ) -> Result<Option<Vec<u8>>, JsError> {
-    if channels == 0 {
-        return Err(JsError::new("channels must be at least 1"));
-    }
+    check_channels(channels)?;
     check_pixels(pixels.len(), width, height, channels)?;
     let rect = smallpeg::CropRect {
         x,
         y,
-        width: cropWidth,
-        height: cropHeight,
+        width: crop_width,
+        height: crop_height,
     };
     Ok(smallpeg::crop(
         pixels,
@@ -290,19 +266,17 @@ pub fn crop(
     ))
 }
 
-/// The largest `[width, height]` that fits inside `maxWidth` x `maxHeight`
-/// with the same aspect ratio. Never enlarges.
-#[allow(non_snake_case)] // parameter names are the JavaScript ones
-#[wasm_bindgen(js_name = fitWithin)]
+/// `[width, height]` that fits, keeping the aspect ratio; never enlarges.
+#[wasm_bindgen]
 pub fn fit_within(
     width: u32,
     height: u32,
-    maxWidth: u32,
-    maxHeight: u32,
+    max_width: u32,
+    max_height: u32,
 ) -> Result<Vec<u32>, JsError> {
-    if width == 0 || height == 0 || maxWidth == 0 || maxHeight == 0 {
-        return Err(JsError::new("all sizes must be at least 1"));
+    if width == 0 || height == 0 || max_width == 0 || max_height == 0 {
+        return Err(JsError::new("smallpeg: all sizes must be at least 1"));
     }
-    let (w, h) = smallpeg::fit_within(width, height, maxWidth, maxHeight);
+    let (w, h) = smallpeg::fit_within(width, height, max_width, max_height);
     Ok(vec![w, h])
 }

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Build the npm package: the bindings crate in wasm/ compiled to
 # WebAssembly, with JavaScript glue for Node (npm/node) and for browsers
-# and bundlers (npm/web).
+# and bundlers (npm/web), and the TypeScript API on top (npm/dist).
+# Needs the dev dependencies: `npm ci` in npm/ first.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -19,6 +20,10 @@ if [[ "$CRATE" != "$PKG" ]]; then
   echo "npm/package.json version $PKG does not match Cargo.toml $CRATE" >&2
   exit 1
 fi
+if [[ ! -x npm/node_modules/.bin/tsc ]]; then
+  echo "TypeScript is missing; run npm ci in npm/ first." >&2
+  exit 1
+fi
 
 cargo build --manifest-path wasm/Cargo.toml --release --target wasm32-unknown-unknown
 WASM=wasm/target/wasm32-unknown-unknown/release/smallpeg_wasm.wasm
@@ -32,9 +37,14 @@ echo '{ "type": "module" }' > npm/web/package.json
 # Shrink further when Binaryen's wasm-opt is installed (optional).
 if command -v wasm-opt >/dev/null; then
   for f in npm/node/smallpeg_wasm_bg.wasm npm/web/smallpeg_wasm_bg.wasm; do
-    wasm-opt -O3 --enable-bulk-memory --enable-nontrapping-float-to-int --enable-sign-ext -o "$f" "$f"
+    wasm-opt -O3 --enable-bulk-memory --enable-nontrapping-float-to-int \
+      --enable-sign-ext --enable-reference-types --enable-multivalue \
+      --enable-mutable-globals -o "$f" "$f"
   done
 fi
+
+rm -rf npm/dist
+npm/node_modules/.bin/tsc -p npm
 
 cp LICENSE-MIT LICENSE-APACHE THIRD_PARTY.md npm/
 ls -l npm/node/*.wasm npm/web/*.wasm
