@@ -1,0 +1,73 @@
+// Type test: compiled with `tsc -p` test-types.tsconfig.json,
+// test-types-node.tsconfig.json and test-types-bundler.tsconfig.json (no
+// output) to check the
+// published declarations read the way the README says. Lines under an
+// expect-error directive must fail to type-check. No DOM types here: the bundler
+// config has no DOM lib (see test-types-dom.mts for the rest).
+
+import initDefault, {
+  crop,
+  decode,
+  encode,
+  fitWithin,
+  info,
+  init,
+  initSync,
+  optimize,
+  resize,
+} from "smallpeg";
+import type { Bytes, Channels, Image, ImageInput, JpegInfo } from "smallpeg";
+import * as web from "smallpeg/web";
+
+declare const jpeg: Uint8Array;
+
+await init();
+// Browser-style calls type-check against either entry point.
+await init("https://example.com/smallpeg_wasm_bg.wasm");
+await initDefault();
+initSync(new Uint8Array(0));
+
+const rgb: ImageInput = { data: new Uint8Array(12), width: 2, height: 2 };
+const a: Bytes = encode(rgb);
+const b: Uint8Array<ArrayBuffer> = encode({ ...rgb, channels: 3 }, { quality: 90, fullColor: true });
+// @ts-expect-error channels must be 1, 3 or 4
+encode({ data: new Uint8Array(8), width: 2, height: 2, channels: 2 });
+// @ts-expect-error quality goes in the options object
+encode(rgb, 80);
+
+// Results that can fail say so.
+const maybe: Bytes | undefined = optimize(jpeg, { baseline: true });
+// @ts-expect-error optimize can return undefined
+const sure: Uint8Array = optimize(jpeg);
+
+const i: JpegInfo | undefined = info(jpeg);
+if (i) {
+  const c: 1 | 2 | 3 | 4 = i.components;
+  const o: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 = i.orientation;
+  const p: boolean = i.progressive;
+  void [c, o, p];
+}
+
+// Images chain from one call to the next.
+const img: Image | undefined = decode(jpeg);
+if (img) {
+  const ch: Channels = img.channels;
+  const [w, h]: [number, number] = fitWithin(img.width, img.height, 1600, 1600);
+  const small: Image = resize(img, w, h, { linear: true });
+  const part: Image | undefined = crop(small, { x: 0, y: 0, width: 10, height: 10 });
+  encode(small);
+  void [ch, part];
+  // @ts-expect-error no free(): results are plain objects
+  img.free();
+}
+
+await web.init();
+await web.init("https://example.com/smallpeg_wasm_bg.wasm");
+await web.init(new Uint8Array(0));
+await web.init({ module_or_path: "https://example.com/smallpeg_wasm_bg.wasm" });
+await web.default();
+web.initSync(new Uint8Array(0));
+web.initSync({ module: new Uint8Array(0) });
+web.encode(rgb, { quality: 75 });
+
+export { a, b, maybe, sure };

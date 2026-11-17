@@ -3,6 +3,8 @@
 /wasm/target/
 /npm/node/
 /npm/web/
+/npm/dist/
+/npm/node_modules/
 /npm/LICENSE-*
 /npm/THIRD_PARTY.md
 /npm/*.tgz
