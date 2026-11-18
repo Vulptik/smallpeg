@@ -143,6 +143,48 @@ export async function testWorker(web, jpeg) {
     w.api.terminate();
   }
 
+  // After a WebAssembly trap the worker stops: that call rejects with the
+  // trap, and every later call with the reason.
+  {
+    let calls = 0;
+    let received = 0;
+    const { port1, port2 } = new MessageChannel();
+    serve(
+      port2,
+      {
+        ...web,
+        encode: () => {
+          calls++;
+          throw new WebAssembly.RuntimeError("unreachable");
+        },
+      },
+      (x) => web.init(x),
+    );
+    const serveOne = port2.onmessage;
+    port2.onmessage = (ev) => {
+      received++;
+      serveOne(ev);
+    };
+    const w = connect(port1, undefined, () => {
+      port1.close();
+      port2.close();
+    });
+    const stoppedMsg = /^Error: smallpeg: the worker stopped after a WebAssembly error \(unreachable\); create a new one$/;
+    // The second call is already waiting when the first traps.
+    const first = w.api.encode(rgb);
+    const second = w.api.fitWithin(4, 2, 2, 2);
+    await assert.rejects(first, (e) => e.name === "RuntimeError" && e.message === "unreachable");
+    await assert.rejects(second, stoppedMsg);
+    // Once the client has heard, later calls are refused without being sent.
+    const sent = received;
+    await assert.rejects(w.api.encode(rgb), stoppedMsg);
+    await new Promise((r) => setTimeout(r, 20));
+    assert.equal(received, sent);
+    await w.api.ready; // it had loaded; the trap does not change that
+    assert.equal(calls, 1);
+    w.api.terminate();
+  }
+
   // A message the worker cannot read fails everything, not just one call.
   {
     const sent = [];

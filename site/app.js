@@ -116,6 +116,8 @@ addEventListener("drop", (e) => {
 });
 
 // ---- settings -----------------------------------------------------------
+// The settings never submit anywhere (Enter in a field would reload the page).
+$("settings").addEventListener("submit", (e) => e.preventDefault());
 const settings = () => ({
   quality: Number($("quality").value),
   maxSide: Number($("maxSide").value),

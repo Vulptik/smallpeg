@@ -146,6 +146,11 @@ with the same aspect ratio. Never enlarges.
 - Two limits of the format and filter throw a plain `Error`: `encode` with
   a width or height above 65535, and `resize` with `linear` on 4 channels.
 - Messages start with `smallpeg:`.
+- A `WebAssembly.RuntimeError` (a trap, such as running out of memory on
+  a very large image) means the module may be left in an inconsistent
+  state: in Node restart the process, and in the browser
+  prefer the [worker](#in-a-web-worker), which stops itself and can be
+  replaced.
 
 ## In a Web Worker
 
@@ -196,11 +201,11 @@ smallpeg.terminate(); // when done
   to allow CORS.
 - `createWorker` throws a `TypeError` where Web Workers are not available,
   such as in Node.
-- A call that fails inside the wasm with something other than the errors
-  above (running out of memory on a very large image, for example)
-  rejects with a plain `Error` whose `name` is the original one (such as
-  `"RuntimeError"`), and may leave the worker unusable: terminate it and
-  create a new one.
+- A call that traps inside the wasm (running out of memory on a very
+  large image, for example) rejects with a plain `Error` whose `name` is
+  `"RuntimeError"`. The worker then stops, since the module may be left
+  in an inconsistent state: later calls reject, and `terminate()` it and
+  create a new one to go on.
 
 ## Example: shrink a photo for upload
 
