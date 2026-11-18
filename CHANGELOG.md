@@ -5,6 +5,26 @@ entries before it record development that preceded publication.
 
 ## Unreleased
 
+- Fix: re-coding (`optimize_jpeg`, `upright_jpeg`, and the encoder) could
+  panic, and in WebAssembly abort the instance, on symbol counts so
+  skewed that the optimal Huffman code needed lengths over 32 (millions
+  of symbols in a Fibonacci-like distribution, so only from a crafted
+  file). The counts are now halved until the code fits.
+- Fix: progressive scans must follow the successive-approximation order
+  (one first scan per coefficient, then refinements lowering Al by one).
+  A file repeating a refinement scan could make every scan revisit every
+  block while reading almost nothing: a 200 KB file took 4.5 seconds,
+  and is now refused at once. A coefficient is now coded in at most 14
+  scans, so a frame's decode time stays within a few times what its
+  pixel count implies. Valid files decode as before; files with an
+  invalid progression, which some decoders accept with a warning, are
+  refused.
+- npm: `resize` takes new sizes up to 65535 per side, as for a JPEG, and
+  refuses a new width that, times the old height, is over 100
+  megapixels. The filter keeps a table per output column and row and a
+  working image of that size, so until now a small image resized to a
+  very long, thin or wide shape could run the WebAssembly out of memory
+  or overflow its 32-bit sizes instead of throwing.
 - npm: `smallpeg/worker` runs the functions in a Web Worker.
   `createWorker()` returns the same functions returning promises, plus
   `ready` and `terminate()`; errors arrive as the same classes, and

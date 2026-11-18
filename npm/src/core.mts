@@ -183,8 +183,14 @@ export interface Api {
 
 const MAX_U32 = 0xffff_ffff;
 
-/** Largest resize output, the same 100 megapixels the decoder accepts. */
+/**
+ * Largest resize output and working image (new width by old height), the
+ * same 100 megapixels the decoder accepts.
+ */
 const MAX_PIXELS = 100_000_000;
+
+/** Largest resize width or height, as for a JPEG. */
+const MAX_SIDE = 65535;
 
 /** A value for an error message: strings quoted, everything else as is. */
 function show(v: unknown): string {
@@ -354,10 +360,19 @@ export function makeApi(glue: Bindings, ensureReady: () => void = () => {}): Api
   function resize(image: ImageInput, width: number, height: number, options?: ResizeOptions): Image {
     ensureReady();
     const args = unpack(image);
-    const w = int("width", width, 1);
-    const h = int("height", height, 1);
+    // Each side is capped like a JPEG's: the filter keeps a table entry per
+    // output column and row, so a thin, very long result would otherwise
+    // cost far more than its pixel count.
+    const w = int("width", width, 1, MAX_SIDE);
+    const h = int("height", height, 1, MAX_SIDE);
     if (w * h > MAX_PIXELS) {
       throw new RangeError(`smallpeg: ${w}x${h} is over the ${MAX_PIXELS / 1e6} megapixel limit for resize`);
+    }
+    // The first pass makes a new-width by old-height image.
+    if (w * args[2] > MAX_PIXELS) {
+      throw new RangeError(
+        `smallpeg: resizing to ${w}x${h} from a height of ${args[2]} needs ${w}x${args[2]} pixels of working space, over the ${MAX_PIXELS / 1e6} megapixel limit`,
+      );
     }
     const data = glue.resize(...args, w, h, flag(opts(options).linear, "linear"));
     return { data: owned(data), width: w, height: h, channels: args[3] };
