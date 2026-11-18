@@ -162,8 +162,8 @@ export const applyOrientation: Api["applyOrientation"] = api.applyOrientation;
  * Resize with a Lanczos3 filter. 4 channels are filtered independently.
  *
  * @throws {RangeError} if the data length does not match the dimensions,
- * a new size is not an integer of at least 1, or the result would be over
- * 100 megapixels.
+ * a new size is not an integer from 1 to 65535, or the result, or the new
+ * width times the old height, would be over 100 megapixels.
  * @throws {Error} if `linear` is set for 4 channels.
  */
 export const resize: Api["resize"] = api.resize;

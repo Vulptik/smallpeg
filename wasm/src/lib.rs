@@ -207,6 +207,9 @@ pub fn apply_orientation(
     })
 }
 
+/// Largest resize result or working image, as for decoding.
+const MAX_RESIZE_PIXELS: u64 = 100_000_000;
+
 /// Lanczos3 resize; `linear` filters gray or RGB in linear light.
 #[wasm_bindgen]
 #[allow(clippy::too_many_arguments)]
@@ -225,6 +228,23 @@ pub fn resize(
         return Err(JsError::new(
             "smallpeg: the new width and height must be at least 1",
         ));
+    }
+    // The filter keeps a table entry per output column and row, so cap each
+    // side as for a JPEG, not only the area.
+    if new_width > 65535 || new_height > 65535 {
+        return Err(JsError::new(
+            "smallpeg: the new width and height are limited to 65535",
+        ));
+    }
+    // The filter's working image is new width by old height, then the
+    // result: bounded like decoding, rather than left to run out of memory
+    // (or overflow 32-bit sizes) and trap the instance.
+    let work = new_width as u64 * new_height.max(height) as u64;
+    if work > MAX_RESIZE_PIXELS {
+        return Err(JsError::new(&format!(
+            "smallpeg: resizing {width}x{height} to {new_width}x{new_height} needs over {} megapixels",
+            MAX_RESIZE_PIXELS / 1_000_000
+        )));
     }
     let (w, h, nw, nh) = (width, height, new_width, new_height);
     Ok(match (channels, linear) {

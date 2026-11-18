@@ -115,8 +115,16 @@ function run(lib, name) {
   assert.throws(() => lib.crop(rgb), TypeError);
   assert.throws(() => lib.encode({ ...rgb, channels: "3" }), TypeError);
   assert.throws(() => lib.applyOrientation(rgb, "6"), TypeError);
-  assert.throws(() => lib.resize(rgb, 0xffffffff, 1), /megapixel/);
+  assert.throws(() => lib.resize(rgb, 0xffffffff, 1), /from 1 to 65535/);
+  assert.throws(() => lib.resize(rgb, 65536, 1), RangeError);
+  // A thin, very long result is cheap in pixels but not in filter tables.
+  assert.throws(() => lib.resize({ data: new Uint8Array(3), width: 1, height: 1 }, 100000000, 1), RangeError);
   assert.throws(() => lib.resize(rgb, 70000, 70000), RangeError);
+  // The working image (new width by old height) is bounded too: a tall
+  // source made very wide must not run the wasm out of memory.
+  const tall = { data: new Uint8Array(600000), width: 1, height: 600000, channels: 1 };
+  assert.throws(() => lib.resize(tall, 1000, 1), (e) => e instanceof RangeError && /working space/.test(e.message));
+  assert.equal(lib.resize(tall, 100, 1).data.length, 100, `${name}: usable after the refusal`);
   assert.throws(() => lib.resize(rgb, Object.create(null), 1), /got \[object Object\]/);
   // Odd values still give the intended error and a readable message.
   assert.throws(() => lib.encode(rgb, { quality: NaN }), /quality .* got NaN/);

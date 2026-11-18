@@ -27,9 +27,16 @@ onmessage = ({ data }) => {
   try {
     let out;
     if (data.lossless) {
-      const opt = optimize(new Uint8Array(data.input));
-      out = opt && (stripMetadata(opt) ?? opt);
-      if (!out) throw new Error("This JPEG uses a coding that can't be re-coded losslessly. Turn off Lossless to re-encode it.");
+      const input = new Uint8Array(data.input);
+      const opt = optimize(input);
+      if (!opt) throw new Error("This JPEG uses a coding that can't be re-coded losslessly. Turn off Lossless to re-encode it.");
+      // Lossless promises the metadata is gone, so never fall back to a
+      // copy that still has it: when re-coding does not pay, use the
+      // original with its metadata removed instead.
+      const clean = stripMetadata(opt);
+      const plain = stripMetadata(input);
+      if (!clean || !plain) throw new Error("Couldn't remove the metadata from this JPEG.");
+      out = plain.byteLength < clean.byteLength ? plain : clean;
     } else {
       out = compress(data);
     }

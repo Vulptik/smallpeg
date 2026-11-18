@@ -115,7 +115,9 @@ the pixels as they are.
 ## `resize(image, width, height, options?)`
 
 Resize with a Lanczos3 filter. 4 channels are filtered independently.
-Results over 100 megapixels are refused.
+The new width and height must be from 1 to 65535, as for a JPEG. Results
+over 100 megapixels are refused, and so is a new width that, times the old
+height, is over 100 megapixels (the filter's working image).
 
 - `linear`: filter in linear light, which keeps fine light and dark
   detail from darkening when reducing. Assumes sRGB. With 4 channels it

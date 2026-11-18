@@ -128,6 +128,9 @@ fn resize_plane<const N: usize>(
 
 /// Resize interleaved 8-bit RGB pixels with a Lanczos3 filter.
 ///
+/// Memory grows with `dw * max(sh, dh)`; bound the sizes when they come
+/// from untrusted input.
+///
 /// # Panics
 ///
 /// Panics if `src.len()` is not exactly `sw * sh * 3`, or if any of the four
@@ -161,6 +164,9 @@ pub fn resize_rgb(src: &[u8], sw: u32, sh: u32, dw: u32, dh: u32) -> Vec<u8> {
 /// Assumes sRGB-encoded input (true of most JPEGs; an embedded ICC profile
 /// with a different transfer curve is not consulted).
 ///
+/// Memory grows with `dw * max(sh, dh)`; bound the sizes when they come
+/// from untrusted input.
+///
 /// # Panics
 ///
 /// Panics if `src.len()` is not exactly `sw * sh * 3`, or if any of the four
@@ -181,6 +187,9 @@ pub fn resize_rgb_linear(src: &[u8], sw: u32, sh: u32, dw: u32, dh: u32) -> Vec<
 /// Resize 8-bit grayscale pixels with a Lanczos3 filter in linear light,
 /// treating the values as sRGB-encoded; see [`resize_rgb_linear`].
 ///
+/// Memory grows with `dw * max(sh, dh)`; bound the sizes when they come
+/// from untrusted input.
+///
 /// # Panics
 ///
 /// Panics if `src.len()` is not exactly `sw * sh`, or if any of the four
@@ -199,6 +208,9 @@ pub fn resize_gray_linear(src: &[u8], sw: u32, sh: u32, dw: u32, dh: u32) -> Vec
 }
 
 /// Resize 8-bit grayscale pixels with a Lanczos3 filter.
+///
+/// Memory grows with `dw * max(sh, dh)`; bound the sizes when they come
+/// from untrusted input.
 ///
 /// # Panics
 ///
@@ -221,6 +233,9 @@ pub fn resize_gray(src: &[u8], sw: u32, sh: u32, dw: u32, dh: u32) -> Vec<u8> {
 /// four-channel layout) with a Lanczos3 filter. Every channel is filtered
 /// independently and linearly, so the channel values need no
 /// interpretation: inverted ("Adobe") CMYK stays inverted.
+///
+/// Memory grows with `dw * max(sh, dh)`; bound the sizes when they come
+/// from untrusted input.
 ///
 /// # Panics
 ///

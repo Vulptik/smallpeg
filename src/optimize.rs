@@ -97,8 +97,13 @@ pub struct Limits {
     /// coefficients, about 537 million pixels of one component) applies.
     pub max_pixels: u64,
     /// Maximum number of scans. Each scan visits every block of its
-    /// components however few bytes it has, so this bounds decode time
-    /// per input byte. Default 128; real files use about 10 at most.
+    /// components however few bytes it has, so this bounds the work a
+    /// small file can ask for. Progressive scans must also follow the
+    /// successive-approximation order, which codes each coefficient in at
+    /// most 14 scans, so decoding a frame costs at most a few times what
+    /// its pixel count suggests (as memory does, time follows the frame
+    /// size; `max_pixels` bounds both). Default 128; real files use about
+    /// 10 at most.
     pub max_scans: u32,
 }
 
@@ -498,6 +503,9 @@ pub(crate) fn parse_and_decode(data: &[u8], any_ids: bool, limits: &Limits) -> O
     let mut restart_interval = 0usize;
     let mut seen_scan = false;
     let mut scans = 0u32;
+    // Progressive state per component and coefficient: the Al of the last
+    // scan that coded it, or -1 before its first scan.
+    let mut approx: Vec<[i8; 64]> = Vec::new();
     let mut qts: [Option<[u16; 64]>; 4] = [None; 4];
     let mut adobe: Option<u8> = None;
     let mut jfif = false;
@@ -642,6 +650,7 @@ pub(crate) fn parse_and_decode(data: &[u8], any_ids: bool, limits: &Limits) -> O
                     return None;
                 }
                 comp_ids = ids;
+                approx = vec![[-1; 64]; n];
                 mcu_w = ceil_div(width as usize, 8 * hmax);
                 mcu_h = ceil_div(height as usize, 8 * vmax);
                 let mut total = 0usize;
@@ -704,6 +713,22 @@ pub(crate) fn parse_and_decode(data: &[u8], any_ids: bool, limits: &Limits) -> O
                 let se = payload[2 + 2 * ns] as usize;
                 let ahal = payload[3 + 2 * ns];
                 let (ah, al) = ((ahal >> 4) as u32, (ahal & 0x0F) as u32);
+                // T.81 G.1.1.1.2: a coefficient's first scan comes once, and
+                // each refinement lowers Al by one from where the last scan
+                // left it. Enforcing it keeps every scan to new bits: a
+                // repeated or unanchored refinement would visit every block
+                // again while reading next to nothing, so a small file could
+                // ask for minutes of work.
+                if progressive && ss <= se && se < 64 {
+                    for s in &sc {
+                        let state = &mut approx[s.ci][ss..=se];
+                        let want = if ah == 0 { -1 } else { ah as i8 };
+                        if state.iter().any(|&a| a != want) {
+                            return None;
+                        }
+                        state.fill(al as i8);
+                    }
+                }
                 let end = decode_scan(
                     data,
                     pos,
@@ -1302,6 +1327,59 @@ mod tests {
 
     fn find(j: &[u8], pat: &[u8]) -> Option<usize> {
         j.windows(pat.len()).position(|w| w == pat)
+    }
+
+    /// A gray progressive file: a DC first scan, then the given AC scans
+    /// (Ss=1, Se=63, Ah/Al byte), each one EOB run over every block.
+    fn eob_run_file(ac_scans: &[u8]) -> Vec<u8> {
+        fn seg(out: &mut Vec<u8>, m: u8, body: &[u8]) {
+            out.extend_from_slice(&[0xFF, m]);
+            out.extend_from_slice(&((body.len() + 2) as u16).to_be_bytes());
+            out.extend_from_slice(body);
+        }
+        let mut f = vec![0xFF, 0xD8];
+        let mut dqt = vec![0u8];
+        dqt.extend([1u8; 64]);
+        seg(&mut f, 0xDB, &dqt);
+        seg(&mut f, 0xC2, &[8, 0, 64, 0, 64, 1, 1, 0x11, 0]);
+        // One 1-bit code each: DC category 0, AC symbol 0x60 (EOB run of 64).
+        let table = |class: u8, sym: u8| {
+            let mut t = vec![class, 1];
+            t.extend([0u8; 15]);
+            t.push(sym);
+            t
+        };
+        seg(&mut f, 0xC4, &table(0x00, 0));
+        seg(&mut f, 0xC4, &table(0x10, 0x60));
+        seg(&mut f, 0xDA, &[1, 1, 0x00, 0, 0, 0x00]);
+        f.extend([0x00; 8]); // 64 blocks of DC category 0
+        for &ahal in ac_scans {
+            seg(&mut f, 0xDA, &[1, 1, 0x00, 1, 63, ahal]);
+            f.push(0x01); // code 0, 6 extra bits 0 (a run of exactly 64), pad 1
+        }
+        f.extend([0xFF, 0xD9]);
+        f
+    }
+
+    #[test]
+    fn progressive_scans_must_follow_successive_approximation() {
+        // First at Al=2, then refinements 2->1 and 1->0: accepted.
+        assert!(optimize_jpeg(&eob_run_file(&[0x02, 0x21, 0x10])).is_some());
+        // A refinement with no first scan, a refinement that repeats, a
+        // refinement skipping a step, and a second first scan: refused.
+        // Each would revisit every block without new data.
+        for scans in [
+            &[0x10][..],
+            &[0x01, 0x10, 0x10],
+            &[0x02, 0x10],
+            &[0x01, 0x01],
+        ] {
+            assert!(
+                optimize_jpeg(&eob_run_file(scans)).is_none(),
+                "{scans:02x?}"
+            );
+            assert!(crate::decode_jpeg(&eob_run_file(scans)).is_none());
+        }
     }
 
     #[test]

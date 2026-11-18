@@ -180,8 +180,11 @@ function finish(res) {
   const before = job.size;
   let out = res.output;
   let after = out.byteLength;
-  // Never hand back something bigger, unless the size was reduced on request.
-  const kept = after >= before && (job.s.lossless || job.s.maxSide === 0) && file.isJpeg;
+  // Never hand back something bigger, unless the size was reduced on
+  // request. Lossless output is never swapped for the original: it is the
+  // copy with the metadata removed, which the original still has.
+  const kept = after >= before && !job.s.lossless && job.s.maxSide === 0 && file.isJpeg;
+  const lean = kept || (job.s.lossless && after >= before);
   if (kept) {
     out = file.bytes;
     after = before;
@@ -189,8 +192,14 @@ function finish(res) {
   const saved = 1 - after / before;
   const grew = after > before;
   $("doneName").textContent = job.name;
-  $("pct").textContent = kept ? "0%" : (grew ? "+" : "−") + (Math.abs(saved) * 100).toFixed(Math.abs(saved) >= 0.1 ? 0 : 1) + "%";
-  $("pctLabel").textContent = kept ? "already lean — original kept" : grew ? "larger than the original" : "smaller";
+  $("pct").textContent = lean ? "0%" : (grew ? "+" : "−") + (Math.abs(saved) * 100).toFixed(Math.abs(saved) >= 0.1 ? 0 : 1) + "%";
+  $("pctLabel").textContent = kept
+    ? "already lean — original kept"
+    : lean
+      ? "already lean — nothing to remove"
+      : grew
+        ? "larger than the original"
+        : "smaller";
   $("sizeBefore").textContent = fmt(before);
   $("sizeAfter").textContent = fmt(after);
   $("barBefore").style.width = "0";
@@ -205,7 +214,7 @@ function finish(res) {
   if (a.href) URL.revokeObjectURL(a.href);
   const url = URL.createObjectURL(new Blob([out], { type: "image/jpeg" }));
   a.href = url;
-  a.download = job.name.replace(/\.[a-z0-9]+$/i, "") + (kept ? ".jpg" : ".small.jpg");
+  a.download = job.name.replace(/\.[a-z0-9]+$/i, "") + (lean ? ".jpg" : ".small.jpg");
 
   const outImg = $("outImg");
   outImg.onload = () => {

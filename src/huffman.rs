@@ -12,6 +12,26 @@ pub(crate) struct HuffTable {
 /// (the T.81 Annex K.2 procedure: reserve one dummy symbol so no real
 /// symbol is assigned the all-ones code, limit lengths to 16).
 pub(crate) fn build_huff_table(freq_in: &[u32; 256]) -> HuffTable {
+    let mut weights = *freq_in;
+    // Lengths are counted up to 32 below. Skewed counts (Fibonacci-like,
+    // millions of symbols) can make the optimal tree deeper; halving the
+    // counts, keeping every used symbol, flattens it until it fits. The
+    // limit to 16 below then costs a little more, as it always does.
+    let codesize = loop {
+        let codesize = code_sizes(&weights);
+        if codesize.iter().all(|&c| c <= 32) {
+            break codesize;
+        }
+        for w in weights.iter_mut() {
+            *w = w.div_ceil(2);
+        }
+    };
+    finish_table(codesize)
+}
+
+/// Optimal code length of each symbol (the T.81 Annex K.2 tree), the
+/// reserved symbol 256 included. Unlimited: may exceed 16.
+fn code_sizes(freq_in: &[u32; 256]) -> [usize; 257] {
     let mut freq = [0i64; 257];
     for (i, &f) in freq_in.iter().enumerate() {
         freq[i] = f as i64;
@@ -58,7 +78,10 @@ pub(crate) fn build_huff_table(freq_in: &[u32; 256]) -> HuffTable {
             codesize[i] += 1;
         }
     }
+    codesize
+}
 
+fn finish_table(codesize: [usize; 257]) -> HuffTable {
     let mut bits_long = [0u8; 33];
     for &cs in codesize.iter() {
         if cs > 0 {
@@ -193,4 +216,45 @@ pub(crate) fn emit_dht(out: &mut Vec<u8>, class: u8, dest: u8, t: &HuffTable) {
     out.push((class << 4) | dest);
     out.extend_from_slice(&t.bits[1..=16]);
     out.extend_from_slice(&t.values);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Lengths of a table: Kraft sum at most 1, nothing over 16, every used
+    /// symbol coded.
+    fn check(freq: &[u32; 256]) {
+        let t = build_huff_table(freq);
+        let mut kraft = 0u64;
+        for (sym, &(_, len)) in t.codes.iter().enumerate() {
+            assert_eq!(len > 0, freq[sym] > 0, "symbol {sym}");
+            assert!(len <= 16);
+            if len > 0 {
+                kraft += 1 << (16 - len);
+            }
+        }
+        assert!(kraft < 1 << 16, "the all-ones code stays free");
+    }
+
+    #[test]
+    fn skewed_frequencies_still_give_a_valid_table() {
+        // Fibonacci weights make the optimal tree a chain: 33 symbols
+        // starting 1, 2 reach depth 33 with the reserved symbol.
+        let mut freq = [0u32; 256];
+        let (mut a, mut b) = (1u32, 2u32);
+        for f in freq.iter_mut().skip(1).take(33) {
+            *f = a;
+            (a, b) = (b, a + b);
+        }
+        check(&freq);
+        // Longer chains, up to the most symbols a table can hold.
+        let mut freq = [0u32; 256];
+        let (mut a, mut b) = (1u32, 1u32);
+        for f in freq.iter_mut().take(46) {
+            *f = a;
+            (a, b) = (b, a.saturating_add(b));
+        }
+        check(&freq);
+    }
 }
