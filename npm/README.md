@@ -50,6 +50,7 @@ Encoding is synchronous; for large images, run it in a Web Worker.
 
 - **Encode** gray, RGB or RGBA pixels, such as a canvas `ImageData`.
 - **Optimize** an existing JPEG losslessly: same pixels, fewer bytes.
+- **Turn upright** a phone photo by its EXIF orientation, losslessly.
 - **Strip metadata** such as EXIF and GPS position, keeping the color
   profile and orientation.
 - **Decode**, read the header, fix EXIF orientation, crop and resize.
@@ -60,6 +61,7 @@ Encoding is synchronous; for large images, run it in a Web Worker.
 |---|---|
 | `encode(image, { quality, fullColor })` | JPEG bytes |
 | `optimize(jpeg, { baseline })` | Re-coded JPEG with identical pixels, or `undefined` |
+| `upright(jpeg)` | JPEG turned upright losslessly, or `undefined` |
 | `stripMetadata(jpeg)` | JPEG without metadata, or `undefined` |
 | `info(jpeg)` | `{ width, height, components, progressive, orientation }`, or `undefined` |
 | `decode(jpeg)` | Image (gray or RGB), or `undefined` |

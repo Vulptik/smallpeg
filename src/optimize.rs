@@ -68,7 +68,8 @@ pub fn optimize_jpeg_baseline_with(data: &[u8], limits: &Limits) -> Option<Vec<u
 /// Resource limits for the functions that take untrusted JPEG bytes
 /// ([`decode_jpeg_with`](crate::decode_jpeg_with),
 /// [`decode_cmyk_with`](crate::decode_cmyk_with), [`optimize_jpeg_with`],
-/// [`optimize_jpeg_baseline_with`]). Input beyond a limit is refused with
+/// [`optimize_jpeg_baseline_with`],
+/// [`upright_jpeg_with`](crate::upright_jpeg_with)). Input beyond a limit is refused with
 /// `None` before anything is allocated for it.
 ///
 /// Memory is decided by the frame header alone: a file of a few hundred
@@ -244,8 +245,8 @@ pub(crate) struct FComp {
     /// Padded block grid (interleaved-MCU coverage), row stride `bw`.
     pub(crate) bw: usize,
     /// Actual data-unit grid (non-interleaved coverage).
-    aw: usize,
-    ah: usize,
+    pub(crate) aw: usize,
+    pub(crate) ah: usize,
     pub(crate) blocks: Vec<[i16; 64]>,
 }
 
@@ -254,11 +255,15 @@ pub(crate) struct Parsed {
     pub(crate) height: u16,
     pub(crate) comps: Vec<FComp>,
     /// Byte ranges of APPn/COM segments, in original order (marker included).
-    meta: Vec<core::ops::Range<usize>>,
+    pub(crate) meta: Vec<core::ops::Range<usize>>,
     /// Byte ranges of DQT segments (marker included).
-    dqt: Vec<core::ops::Range<usize>>,
-    mcu_w: usize,
-    mcu_h: usize,
+    pub(crate) dqt: Vec<core::ops::Range<usize>>,
+    /// Offset of the SOF marker: APPn segments before it are the ones
+    /// `jpeg_info` and viewers read.
+    pub(crate) frame_at: usize,
+    /// MCU columns and rows.
+    pub(crate) mcu_w: usize,
+    pub(crate) mcu_h: usize,
     /// Quantization tables by destination, in zigzag order as stored
     /// (`None` where no DQT defined one). Only the pixel decoder reads
     /// these; re-encoding copies the DQT bytes verbatim.
@@ -481,6 +486,7 @@ pub(crate) fn parse_and_decode(data: &[u8], any_ids: bool, limits: &Limits) -> O
     let mut dc_tables: [Option<DecHuff>; 4] = [None, None, None, None];
     let mut ac_tables: [Option<DecHuff>; 4] = [None, None, None, None];
     let mut frame: Option<(bool, u16, u16)> = None; // (progressive, w, h)
+    let mut frame_at = 0usize;
     let mut comps: Vec<FComp> = Vec::new();
     let mut comp_ids: Vec<u8> = Vec::new();
     let (mut mcu_w, mut mcu_h) = (0usize, 0usize);
@@ -653,6 +659,7 @@ pub(crate) fn parse_and_decode(data: &[u8], any_ids: bool, limits: &Limits) -> O
                     });
                 }
                 frame = Some((marker == 0xC2, width, height));
+                frame_at = seg_range.start;
             }
             0xDA => {
                 let (progressive, _, _) = *frame.as_ref()?;
@@ -736,6 +743,7 @@ pub(crate) fn parse_and_decode(data: &[u8], any_ids: bool, limits: &Limits) -> O
         comps,
         meta,
         dqt,
+        frame_at,
         mcu_w,
         mcu_h,
         qts,
@@ -1062,6 +1070,18 @@ fn refine(c: i16, p1: i16) -> Option<i16> {
 // -------------------------------------------------------------- re-encode
 
 fn reencode(data: &[u8], p: Parsed, allow_progressive: bool) -> Vec<u8> {
+    // Header: SOI, then the original APPn/COM and DQT segments verbatim.
+    let mut head = Vec::with_capacity(1024);
+    head.extend_from_slice(&[0xFF, 0xD8]);
+    for r in p.meta.iter().chain(p.dqt.iter()) {
+        head.extend_from_slice(&data[r.clone()]);
+    }
+    encode_parsed(head, p, allow_progressive)
+}
+
+/// Write `p`'s coefficients after `head` (SOI and the APPn/COM/DQT
+/// segments): baseline, and progressive when allowed, keeping the smaller.
+pub(crate) fn encode_parsed(head: Vec<u8>, p: Parsed, allow_progressive: bool) -> Vec<u8> {
     // Wrap the decoded grids in the crate's Component so the existing
     // emitters (optimized-Huffman baseline, scan-optimized progressive)
     // work unchanged. Component 0 gets table class 0, the rest share
@@ -1086,13 +1106,6 @@ fn reencode(data: &[u8], p: Parsed, allow_progressive: bool) -> Vec<u8> {
         })
         .collect();
     let order = interleave_order(&comps, p.mcu_w, p.mcu_h);
-
-    // Header: SOI, then the original APPn/COM and DQT segments verbatim.
-    let mut head = Vec::with_capacity(1024);
-    head.extend_from_slice(&[0xFF, 0xD8]);
-    for r in p.meta.iter().chain(p.dqt.iter()) {
-        head.extend_from_slice(&data[r.clone()]);
-    }
     let emit_sof = |out: &mut Vec<u8>, marker: u8| {
         let sof_len = 8 + 3 * comps.len() as u16;
         out.extend_from_slice(&[0xFF, marker]);

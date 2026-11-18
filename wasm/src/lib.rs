@@ -157,6 +157,11 @@ pub fn optimize(jpeg: &[u8], baseline: bool) -> Option<Vec<u8>> {
 }
 
 #[wasm_bindgen]
+pub fn upright(jpeg: &[u8]) -> Option<Vec<u8>> {
+    smallpeg::upright_jpeg(jpeg)
+}
+
+#[wasm_bindgen]
 pub fn strip_metadata(jpeg: &[u8]) -> Option<Vec<u8>> {
     smallpeg::strip_metadata(jpeg)
 }

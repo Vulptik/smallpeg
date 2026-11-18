@@ -13,6 +13,10 @@ fuzz_target!(|data: &[u8]| {
     // The pixel stage (IDCT, upsampling, color conversion) too. A pixel
     // budget keeps single runs well inside the fuzzer's RSS limit.
     let limits = smallpeg::Limits::default().max_pixels(1 << 22);
+    // Turned output must itself be a JPEG the parser accepts.
+    if let Some(up) = smallpeg::upright_jpeg_with(data, &limits) {
+        assert!(smallpeg::optimize_jpeg(&up).is_some());
+    }
     let _ = smallpeg::decode_jpeg_with(data, &limits);
     let _ = smallpeg::decode_cmyk_with(data, &limits);
 });

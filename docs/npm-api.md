@@ -72,6 +72,20 @@ out larger; compare lengths.
   for targets that do not accept progressive JPEGs (PDF embedding, for
   example). Default false.
 
+## `upright(jpeg)`
+
+Turn a JPEG upright without decoding it to pixels: the EXIF orientation is applied
+to the image itself and the tag set to 1, with no loss of quality, so
+viewers that ignore EXIF show it right too. The entropy coding is
+optimized as in `optimize`, so the result may be progressive; pass it to
+`optimize(..., { baseline: true })` for baseline output. Returns
+`undefined` where `optimize` does, and when the image is smaller than one
+MCU on an axis that is mirrored.
+
+An axis that is mirrored must be a whole number of MCUs (8 or 16 pixels
+in most files); otherwise the last partial row or column (up to 15 pixels
+in most files) is cut off. `info` on the result gives the final size.
+
 ## `stripMetadata(jpeg)`
 
 Remove EXIF (including GPS position), XMP, comments and other metadata

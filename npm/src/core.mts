@@ -118,6 +118,7 @@ export interface Bindings {
     full_color?: boolean | null,
   ) => Uint8Array;
   optimize: (jpeg: Uint8Array, baseline: boolean) => Uint8Array | undefined;
+  upright: (jpeg: Uint8Array) => Uint8Array | undefined;
   strip_metadata: (jpeg: Uint8Array) => Uint8Array | undefined;
   info: (jpeg: Uint8Array) => GlueInfo | undefined;
   decode: (jpeg: Uint8Array) => GlueImage | undefined;
@@ -165,6 +166,7 @@ export type ParamsMatch<G extends Pick<Bindings, keyof Bindings>> = {
 export interface Api {
   encode(image: ImageInput, options?: EncodeOptions): Bytes;
   optimize(jpeg: Uint8Array, options?: OptimizeOptions): Bytes | undefined;
+  upright(jpeg: Uint8Array): Bytes | undefined;
   stripMetadata(jpeg: Uint8Array): Bytes | undefined;
   info(jpeg: Uint8Array): JpegInfo | undefined;
   decode(jpeg: Uint8Array): Image | undefined;
@@ -305,6 +307,12 @@ export function makeApi(glue: Bindings, ensureReady: () => void = () => {}): Api
     return out && owned(out);
   }
 
+  function upright(jpeg: Uint8Array): Bytes | undefined {
+    ensureReady();
+    const out = glue.upright(jpegBytes(jpeg));
+    return out && owned(out);
+  }
+
   function stripMetadata(jpeg: Uint8Array): Bytes | undefined {
     ensureReady();
     const out = glue.strip_metadata(jpegBytes(jpeg));
@@ -383,5 +391,5 @@ export function makeApi(glue: Bindings, ensureReady: () => void = () => {}): Api
     return [w!, h!];
   }
 
-  return { encode, optimize, stripMetadata, info, decode, applyOrientation, resize, crop, fitWithin };
+  return { encode, optimize, upright, stripMetadata, info, decode, applyOrientation, resize, crop, fitWithin };
 }
