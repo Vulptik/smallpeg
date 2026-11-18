@@ -9,8 +9,9 @@ function's documentation shows up in editors.
 |---|---|
 | `"smallpeg"` | Node, and browsers through a bundler (resolves to the browser build there) |
 | `"smallpeg/web"` | Browsers and bundlers, explicitly |
+| `"smallpeg/worker"` | Browsers and bundlers: the same functions run in a Web Worker ([below](#in-a-web-worker)) |
 
-Both export the same functions. The browser build has to load its `.wasm`
+The first two export the same functions. The browser build has to load its `.wasm`
 file before use:
 
 ```js
@@ -143,6 +144,61 @@ with the same aspect ratio. Never enlarges.
 - Two limits of the format and filter throw a plain `Error`: `encode` with
   a width or height above 65535, and `resize` with `linear` on 4 channels.
 - Messages start with `smallpeg:`.
+
+## In a Web Worker
+
+The functions are synchronous, and encoding or decoding a large photo
+takes long enough to freeze a page for a moment. `createWorker` starts a
+Web Worker that loads the wasm by itself, and returns the same functions
+taking the same arguments and returning promises:
+
+```js
+import { createWorker } from "smallpeg/worker";
+
+const smallpeg = createWorker();
+const jpeg = await smallpeg.encode(ctx.getImageData(0, 0, w, h), { quality: 80 });
+const blob = new Blob([jpeg], { type: "image/jpeg" });
+smallpeg.terminate(); // when done
+```
+
+- Arguments are copied to the worker, so your buffers stay usable. A
+  `Uint8Array` that views only part of a larger buffer, passed directly or
+  as the `data` of a plain image object, is copied on its own, not with
+  the whole buffer. Returned bytes
+  and image `data` are moved back without a copy.
+- Calls on one worker run one at a time, in order. Create several workers
+  to run in parallel. Each call sends its arguments and result across, so
+  a chain such as decode, resize and encode copies the pixels on each
+  step.
+- Errors reject the promise with the same class and message the function
+  throws: `TypeError`, `RangeError` or `Error`. An argument that cannot be
+  sent to a worker (such as a function) is a `TypeError`.
+- `ready` settles once the wasm has loaded, and rejects if the worker
+  could not start or load it; every call then rejects with that error.
+  Calls wait for it themselves, so awaiting it is optional.
+- `terminate()` stops the worker at once, which is also the way to cancel
+  a call: calls still running or waiting, and any made later, reject with
+  `Error("smallpeg: worker terminated")`. There is no progress reporting.
+- `createWorker({ wasm })` loads the `.wasm` from elsewhere: a URL (string
+  or `URL`; a relative one resolves against the page), an `ArrayBuffer` or
+  `Uint8Array`, or a `WebAssembly.Module`. Unlike `init`, it cannot take a
+  `Response` or a promise, which cannot be sent to a worker; anything else
+  makes `ready` and every call reject with a `TypeError`.
+- Bundlers that understand `new Worker(new URL(..., import.meta.url))`
+  bundle the worker script. A development server that pre-bundles
+  dependencies (Vite's, for one) can break that relative URL, as it can the
+  `.wasm` one; leaving the package out of pre-bundling
+  (`optimizeDeps.exclude` in Vite) avoids it.
+- Loaded from another origin (a CDN), the package starts its worker
+  through a same-origin script that imports it, which needs that origin
+  to allow CORS.
+- `createWorker` throws a `TypeError` where Web Workers are not available,
+  such as in Node.
+- A call that fails inside the wasm with something other than the errors
+  above (running out of memory on a very large image, for example)
+  rejects with a plain `Error` whose `name` is the original one (such as
+  `"RuntimeError"`), and may leave the worker unusable: terminate it and
+  create a new one.
 
 ## Example: shrink a photo for upload
 

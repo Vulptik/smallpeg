@@ -19,6 +19,8 @@ import initDefault, {
 } from "smallpeg";
 import type { Bytes, Channels, Image, ImageInput, JpegInfo } from "smallpeg";
 import * as web from "smallpeg/web";
+import { createWorker, type WorkerApi } from "smallpeg/worker";
+import type { Image as WorkerImage } from "smallpeg/worker";
 
 declare const jpeg: Uint8Array;
 
@@ -72,4 +74,23 @@ web.initSync(new Uint8Array(0));
 web.initSync({ module: new Uint8Array(0) });
 web.encode(rgb, { quality: 75 });
 
-export { a, b, maybe, sure };
+// The worker API: same arguments, promised results.
+const w: WorkerApi = createWorker({ wasm: "https://example.com/smallpeg_wasm_bg.wasm" });
+createWorker();
+await w.ready;
+const wjpeg: Bytes = await w.encode(rgb, { quality: 90 });
+const wmaybe: Bytes | undefined = await w.optimize(wjpeg, { baseline: true });
+const wimg: WorkerImage | undefined = await w.decode(wjpeg);
+const wsize: [number, number] = await w.fitWithin(4000, 3000, 1000, 1000);
+const wsame: Image = await w.resize(rgb, 2, 2);
+w.terminate();
+// @ts-expect-error results are promises
+const wsync: Bytes = w.encode(rgb);
+// @ts-expect-error options are checked as for encode
+w.encode(rgb, { qualty: 90 });
+// @ts-expect-error the worker loads the wasm itself
+w.init();
+// @ts-expect-error decode can give undefined
+const wsure: Image = await w.decode(wjpeg);
+
+export { a, b, maybe, sure, wmaybe, wimg, wsize, wsame, wsync, wsure };
