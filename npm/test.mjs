@@ -64,6 +64,19 @@ function run(lib, name) {
   const clean = lib.stripMetadata(a);
   assert.deepEqual(lib.decode(clean).data, lib.decode(a).data);
 
+  // upright: an EXIF orientation of 6 (turn 90 degrees clockwise) is
+  // applied to the image, and the tag becomes 1.
+  const exif = [0x45, 0x78, 0x69, 0x66, 0, 0, 0x4d, 0x4d, 0, 42, 0, 0, 0, 8, 0, 1,
+    0x01, 0x12, 0, 3, 0, 0, 0, 1, 0, 6, 0, 0, 0, 0, 0, 0];
+  const tagged = new Uint8Array([0xff, 0xd8, 0xff, 0xe1, 0, exif.length + 2, ...exif, ...a.subarray(2)]);
+  assert.equal(lib.info(tagged).orientation, 6);
+  const up = lib.upright(tagged);
+  assert.deepEqual([lib.info(up).width, lib.info(up).height, lib.info(up).orientation], [height, width, 1]);
+  const want = lib.applyOrientation(lib.decode(a), 6).data;
+  const got = lib.decode(up).data;
+  assert.ok(got.every((v, i) => Math.abs(v - want[i]) <= 1), `${name}: upright keeps pixels`);
+  assert.equal(lib.upright(new Uint8Array([0xff, 0xd8])), undefined);
+
   // Untrusted input: undefined, not an exception.
   assert.equal(lib.decode(new Uint8Array([1, 2, 3])), undefined);
   assert.equal(lib.optimize(new Uint8Array([0xff, 0xd8, 0xff])), undefined);

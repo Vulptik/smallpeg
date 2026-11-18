@@ -5,6 +5,11 @@ entries before it record development that preceded publication.
 
 ## Unreleased
 
+- `upright_jpeg` (npm: `upright`) turns a JPEG upright by its EXIF
+  orientation without decoding it to pixels: blocks of quantized
+  coefficients are moved, mirrored and transposed, so no quality is lost,
+  and the tag is set to 1. An axis that is mirrored is trimmed to whole
+  MCUs (up to 15 pixels in most files) when it is not already.
 - npm package: the WebAssembly build uses 128-bit SIMD. Decoding is about
   a third faster and resizing about 6% faster; the output is
   byte-identical. Browsers need SIMD support: Safari (and iOS) 16.4 or

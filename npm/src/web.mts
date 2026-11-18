@@ -125,6 +125,14 @@ export const encode: Api["encode"] = api.encode;
  */
 export const optimize: Api["optimize"] = api.optimize;
 /**
+ * Turn a JPEG upright without decoding it to pixels: the EXIF orientation is applied
+ * to the image and the tag set to 1, with no loss of quality. Mirrored
+ * edges that are not a whole MCU (usually 8 or 16 pixels) are cut off,
+ * up to 15 pixels in most files. `undefined` where `optimize` would return
+ * it, and when the image is smaller than one MCU on a mirrored axis.
+ */
+export const upright: Api["upright"] = api.upright;
+/**
  * Remove EXIF (including GPS), XMP, comments and other metadata without
  * touching the image data. Keeps the color profile and orientation.
  * `undefined` if the file cannot be parsed.

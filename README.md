@@ -44,6 +44,7 @@ if let Some(smaller) = smallpeg::optimize_jpeg(&input) {
 - **Encode** grayscale, RGB and CMYK, baseline or progressive, with
   trellis quantization and per-image Huffman tables.
 - **Optimize** an existing JPEG losslessly: same pixels, fewer bytes.
+- **Turn upright** a phone photo by its EXIF orientation, losslessly.
 - **Strip metadata** such as EXIF and GPS position, keeping the color
   profile and orientation.
 - **Decode**, read the header, fix EXIF orientation, crop and resize
@@ -57,7 +58,7 @@ if let Some(smaller) = smallpeg::optimize_jpeg(&input) {
 ## Documentation
 
 - [Guide](https://github.com/sawapi/smallpeg/blob/main/docs/guide.md):
-  resizing, cropping, optimizing, CMYK, untrusted input
+  resizing, cropping, orientation, optimizing, CMYK, untrusted input
 - [Color profiles](https://github.com/sawapi/smallpeg/blob/main/docs/color-profiles.md):
   keeping colors right for Display P3 and other non-sRGB sources
 - [How the encoder works](https://github.com/sawapi/smallpeg/blob/main/docs/encoder.md):

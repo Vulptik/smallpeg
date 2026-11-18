@@ -103,8 +103,8 @@
 //!
 //! The encoding and resizing entry points take the pixel buffer and its
 //! dimensions as separate arguments, and panic when they disagree — see the
-//! `# Panics` section on each. [`optimize_jpeg`] and the decoders take
-//! untrusted bytes instead and never panic: they return `None` for anything
+//! `# Panics` section on each. [`optimize_jpeg`], [`upright_jpeg`] and the
+//! decoders take untrusted bytes instead and never panic: they return `None` for anything
 //! they cannot handle safely. Memory follows the declared frame size,
 //! not the file size, so for untrusted input check [`jpeg_info`] or pass
 //! [`Limits`] with a pixel budget to the `_with` variants.
@@ -128,6 +128,7 @@ mod quant;
 mod resize;
 mod symbols;
 mod trellis;
+mod upright;
 
 pub use cmyk::{AdobeTransform, CmykImage, decode_cmyk, decode_cmyk_with};
 pub use decode::{DecodedImage, decode_jpeg, decode_jpeg_with};
@@ -140,6 +141,7 @@ pub use resize::{
     CropRect, crop, fit_within, resize_cmyk, resize_gray, resize_gray_linear, resize_rgb,
     resize_rgb_linear,
 };
+pub use upright::{upright_jpeg, upright_jpeg_with};
 
 use crate::component::{Component, interleave_order};
 use crate::dct::dequant_scale;

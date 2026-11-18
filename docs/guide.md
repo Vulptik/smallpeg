@@ -47,7 +47,27 @@ assume sRGB input.
 
 ## Orientation
 
-Decoders return pixels as stored. Phone photos usually need turning:
+Phone photos are usually stored sideways with an EXIF orientation that
+tells viewers how to turn them. `upright_jpeg` turns the JPEG itself
+without decoding it to pixels, so there is no loss of quality, and sets the tag to
+1, for viewers that ignore EXIF:
+
+```rust
+if let Some(up) = smallpeg::upright_jpeg(&jpeg) {
+    // same pixels, upright; the entropy coding is optimized too
+}
+```
+
+The result may be progressive; `optimize_jpeg_baseline` on it gives
+baseline output, also without loss.
+
+It moves whole blocks of the compressed image, so an axis it mirrors must
+be a whole number of MCUs (8 or 16 pixels in most files). Otherwise the
+last partial row or column (up to 15 pixels in most files) is cut off: a
+5712 x 4284 photo with orientation 6 comes out 4272 x 5712. An image
+smaller than one MCU on such an axis returns `None`.
+
+Decoders return pixels as stored. To turn decoded pixels instead:
 
 ```rust
 if let (Some(info), Some(img)) = (smallpeg::jpeg_info(&jpeg), smallpeg::decode_jpeg(&jpeg)) {
@@ -103,7 +123,7 @@ The decoders and `optimize_jpeg` take bytes from anywhere and never panic:
 they return `None` for anything they cannot handle safely. Memory follows
 the frame size declared in the header, not the file size, so for input you
 do not control, check `jpeg_info` first or pass a `Limits` to the `_with`
-variants (`decode_jpeg_with`, `optimize_jpeg_with`, ...). `Limits` caps the
+variants (`decode_jpeg_with`, `optimize_jpeg_with`, `upright_jpeg_with`, ...). `Limits` caps the
 frame's pixel count (100 megapixels by default) and the number of
 progressive scans. `optimize_jpeg`, which shares the decoders' parsing, is fuzzed weekly
 in CI.

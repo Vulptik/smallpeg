@@ -15,6 +15,7 @@ import initDefault, {
   initSync,
   optimize,
   resize,
+  upright,
 } from "smallpeg";
 import type { Bytes, Channels, Image, ImageInput, JpegInfo } from "smallpeg";
 import * as web from "smallpeg/web";
@@ -37,6 +38,7 @@ encode(rgb, 80);
 
 // Results that can fail say so.
 const maybe: Bytes | undefined = optimize(jpeg, { baseline: true });
+const turned: Bytes | undefined = upright(jpeg);
 // @ts-expect-error optimize can return undefined
 const sure: Uint8Array = optimize(jpeg);
 

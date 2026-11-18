@@ -7,6 +7,12 @@ use crate::optimize::next_marker;
 /// The EXIF Orientation tag (0x0112) from an APP1 payload
 /// (`Exif\0\0` + TIFF stream), if present and in 1..=8.
 pub(crate) fn exif_orientation(app1: &[u8]) -> Option<u8> {
+    exif_orientation_at(app1).map(|(o, _, _)| o)
+}
+
+/// [`exif_orientation`] with where its value sits: the offset of the
+/// two-byte SHORT in `app1`, and whether the TIFF stream is little-endian.
+pub(crate) fn exif_orientation_at(app1: &[u8]) -> Option<(u8, usize, bool)> {
     let t = app1.strip_prefix(b"Exif\0\0")?;
     let le = match t.get(..4)? {
         [b'I', b'I', 42, 0] => true,
@@ -41,7 +47,7 @@ pub(crate) fn exif_orientation(app1: &[u8]) -> Option<u8> {
                 return None;
             }
             let v = u16_at(e + 8)?;
-            return (1..=8).contains(&v).then_some(v as u8);
+            return (1..=8).contains(&v).then_some((v as u8, 6 + e + 8, le));
         }
     }
     None
