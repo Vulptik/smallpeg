@@ -6,8 +6,10 @@
 //! emitters, keeping whichever is smaller. Decoded pixels are bit-identical
 //! because everything the decoder derives pixels from is preserved:
 //! coefficients, sampling factors and component ids exactly, and the
-//! APPn/COM/DQT segments byte-for-byte (re-emitted after SOI in
-//! APPn/COM-then-DQT order, which no decoder distinguishes).
+//! APPn/COM/DQT segments byte-for-byte. DQT and the APPn/COM segments
+//! that came before the frame header are re-emitted after SOI; later
+//! APPn/COM segments keep their side of the frame header and of the first
+//! scan (see [`Placed`]), since readers treat those differently.
 //!
 //! This is an entropy decoder only (Huffman coding and the scan structure);
 //! there is no IDCT, upsampling or color conversion here. The pixel
@@ -261,6 +263,8 @@ pub(crate) struct Parsed {
     /// Offset of the SOF marker: APPn segments before it are the ones
     /// `jpeg_info` and viewers read.
     pub(crate) frame_at: usize,
+    /// Offset of the first SOS marker.
+    pub(crate) scan_at: usize,
     /// MCU columns and rows.
     pub(crate) mcu_w: usize,
     pub(crate) mcu_h: usize,
@@ -487,6 +491,7 @@ pub(crate) fn parse_and_decode(data: &[u8], any_ids: bool, limits: &Limits) -> O
     let mut ac_tables: [Option<DecHuff>; 4] = [None, None, None, None];
     let mut frame: Option<(bool, u16, u16)> = None; // (progressive, w, h)
     let mut frame_at = 0usize;
+    let mut scan_at = 0usize;
     let mut comps: Vec<FComp> = Vec::new();
     let mut comp_ids: Vec<u8> = Vec::new();
     let (mut mcu_w, mut mcu_h) = (0usize, 0usize);
@@ -663,6 +668,9 @@ pub(crate) fn parse_and_decode(data: &[u8], any_ids: bool, limits: &Limits) -> O
             }
             0xDA => {
                 let (progressive, _, _) = *frame.as_ref()?;
+                if !seen_scan {
+                    scan_at = seg_range.start;
+                }
                 scans += 1;
                 if scans > limits.max_scans {
                     return None;
@@ -744,6 +752,7 @@ pub(crate) fn parse_and_decode(data: &[u8], any_ids: bool, limits: &Limits) -> O
         meta,
         dqt,
         frame_at,
+        scan_at,
         mcu_w,
         mcu_h,
         qts,
@@ -1070,18 +1079,67 @@ fn refine(c: i16, p1: i16) -> Option<i16> {
 // -------------------------------------------------------------- re-encode
 
 fn reencode(data: &[u8], p: Parsed, allow_progressive: bool) -> Vec<u8> {
-    // Header: SOI, then the original APPn/COM and DQT segments verbatim.
-    let mut head = Vec::with_capacity(1024);
-    head.extend_from_slice(&[0xFF, 0xD8]);
-    for r in p.meta.iter().chain(p.dqt.iter()) {
-        head.extend_from_slice(&data[r.clone()]);
-    }
-    encode_parsed(head, p, allow_progressive)
+    let placed = Placed::new(data, &p, |_| {}, |seg, out| out.extend_from_slice(seg));
+    encode_parsed(placed, p, allow_progressive)
 }
 
-/// Write `p`'s coefficients after `head` (SOI and the APPn/COM/DQT
-/// segments): baseline, and progressive when allowed, keeping the smaller.
-pub(crate) fn encode_parsed(head: Vec<u8>, p: Parsed, allow_progressive: bool) -> Vec<u8> {
+/// The non-image segments of re-encoded output, by where they go.
+///
+/// Readers treat APPn/COM segments differently by position: header probes
+/// (and this crate's `jpeg_info`) stop at the frame header, common decoders
+/// collect markers up to the first scan, and markers between scans are
+/// rarely read. So each segment stays on its side of those two points.
+pub(crate) struct Placed {
+    /// SOI, the APPn/COM segments before the frame header, and every DQT.
+    pub(crate) head: Vec<u8>,
+    /// APPn/COM segments between the frame header and the first scan.
+    pub(crate) after_frame: Vec<u8>,
+    /// APPn/COM segments after the first scan; written before EOI.
+    pub(crate) before_end: Vec<u8>,
+}
+
+impl Placed {
+    /// Copy `p`'s segments from `data`, letting `edit` change each APPn/COM
+    /// segment (marker included) on the way; `dqt` writes each DQT segment.
+    pub(crate) fn new(
+        data: &[u8],
+        p: &Parsed,
+        mut edit: impl FnMut(&mut [u8]),
+        mut dqt: impl FnMut(&[u8], &mut Vec<u8>),
+    ) -> Placed {
+        let mut placed = Placed {
+            head: Vec::with_capacity(1024),
+            after_frame: Vec::new(),
+            before_end: Vec::new(),
+        };
+        placed.head.extend_from_slice(&[0xFF, 0xD8]);
+        for r in &p.meta {
+            let out = if r.start < p.frame_at {
+                &mut placed.head
+            } else if r.start < p.scan_at {
+                &mut placed.after_frame
+            } else {
+                &mut placed.before_end
+            };
+            let at = out.len();
+            out.extend_from_slice(&data[r.clone()]);
+            edit(&mut out[at..]);
+        }
+        for r in &p.dqt {
+            dqt(&data[r.clone()], &mut placed.head);
+        }
+        placed
+    }
+}
+
+/// Write `p`'s coefficients around `placed`'s segments: baseline, and
+/// progressive when allowed, keeping the smaller.
+pub(crate) fn encode_parsed(placed: Placed, p: Parsed, allow_progressive: bool) -> Vec<u8> {
+    let Placed {
+        head,
+        after_frame,
+        before_end,
+    } = placed;
     // Wrap the decoded grids in the crate's Component so the existing
     // emitters (optimized-Huffman baseline, scan-optimized progressive)
     // work unchanged. Component 0 gets table class 0, the rest share
@@ -1126,6 +1184,7 @@ pub(crate) fn encode_parsed(head: Vec<u8>, p: Parsed, allow_progressive: bool) -
     let baseline = {
         let mut out = head.clone();
         emit_sof(&mut out, 0xC0);
+        out.extend_from_slice(&after_frame);
         let mut freqs = vec![[0u32; 256]; n_tables];
         for_each_symbol(&comps, &order, |tbl, sym, _n, _bits| {
             freqs[tbl][sym as usize] += 1;
@@ -1151,6 +1210,7 @@ pub(crate) fn encode_parsed(head: Vec<u8>, p: Parsed, allow_progressive: bool) -
         });
         writer.flush();
         let mut out = writer.out;
+        out.extend_from_slice(&before_end);
         out.extend_from_slice(&[0xFF, 0xD9]);
         out
     };
@@ -1161,7 +1221,10 @@ pub(crate) fn encode_parsed(head: Vec<u8>, p: Parsed, allow_progressive: bool) -
     // Progressive candidate with the measured scan script; keep the smaller.
     let mut prog_head = head;
     emit_sof(&mut prog_head, 0xC2);
-    let prog = encode_progressive_scans(&comps, &order, prog_head);
+    prog_head.extend_from_slice(&after_frame);
+    let mut prog = encode_progressive_scans(&comps, &order, prog_head);
+    let eoi = prog.len() - 2;
+    prog.splice(eoi..eoi, before_end);
     if prog.len() <= baseline.len() {
         prog
     } else {
@@ -1223,6 +1286,62 @@ mod tests {
                         assert_eq!(px(&j), px(&o), "{w}x{h} prog={prog} q={q}");
                     }
                 }
+            }
+        }
+    }
+
+    /// `j` with a segment `marker` + `payload` inserted at byte `at`.
+    fn insert(j: &[u8], at: usize, marker: u8, payload: &[u8]) -> Vec<u8> {
+        let mut o = j[..at].to_vec();
+        o.extend_from_slice(&[0xFF, marker]);
+        o.extend_from_slice(&((payload.len() + 2) as u16).to_be_bytes());
+        o.extend_from_slice(payload);
+        o.extend_from_slice(&j[at..]);
+        o
+    }
+
+    fn find(j: &[u8], pat: &[u8]) -> Option<usize> {
+        j.windows(pat.len()).position(|w| w == pat)
+    }
+
+    #[test]
+    fn late_metadata_keeps_its_place() {
+        // An EXIF orientation of 6 after the frame header (which header
+        // readers never see) must not move ahead of it, and a comment
+        // after the first scan stays after the scans.
+        let exif: Vec<u8> = [
+            &b"Exif\0\0MM\0*\0\0\0\x08\0\x01\x01\x12\0\x03\0\0\0\x01\0\x06"[..],
+            &[0; 6],
+        ]
+        .concat();
+        let rgb = test_rgb(48, 32);
+        for prog in [false, true] {
+            let j = Encoder::new(80).progressive(prog).encode_rgb(&rgb, 48, 32);
+            let sos = find(&j, &[0xFF, 0xDA]).unwrap();
+            let j = insert(&j, sos, 0xE1, &exif);
+            // The original first SOS is now at `first`; the next one, if
+            // any, is a progressive file's second scan.
+            let first = sos + 4 + exif.len();
+            let second = find(&j[first + 2..], &[0xFF, 0xDA])
+                .map(|p| p + first + 2)
+                .unwrap_or(j.len() - 2);
+            let j = insert(&j, second, 0xFE, b"late");
+            assert_eq!(jpeg_info(&j).unwrap().orientation, 1);
+            for out in [
+                optimize_jpeg(&j).unwrap(),
+                optimize_jpeg_baseline(&j).unwrap(),
+            ] {
+                assert_eq!(jpeg_info(&out).unwrap().orientation, 1, "prog={prog}");
+                let sof = find(&out, &[0xFF, 0xC0])
+                    .or(find(&out, &[0xFF, 0xC2]))
+                    .unwrap();
+                let app1 = find(&out, b"Exif\0\0").unwrap();
+                let first_scan = find(&out, &[0xFF, 0xDA]).unwrap();
+                assert!(sof < app1 && app1 < first_scan, "prog={prog}");
+                let com = find(&out, b"late").unwrap();
+                let last_scan = out.windows(2).rposition(|w| w == [0xFF, 0xDA]).unwrap();
+                assert!(com > last_scan && com < out.len() - 2, "prog={prog}");
+                assert_eq!(px(&out), px(&j));
             }
         }
     }

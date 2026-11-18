@@ -10,6 +10,11 @@ entries before it record development that preceded publication.
   coefficients are moved, mirrored and transposed, so no quality is lost,
   and the tag is set to 1. An axis that is mirrored is trimmed to whole
   MCUs (up to 15 pixels in most files) when it is not already.
+- Fix: `optimize_jpeg` (and the other re-coding functions) moved APPn and
+  COM segments that came after the frame header to the front of the file.
+  An EXIF orientation there, which header readers never saw, then took
+  effect and turned the image. Such segments now stay after the frame
+  header, or after the scans when they followed the first scan.
 - npm package: the WebAssembly build uses 128-bit SIMD. Decoding is about
   a third faster and resizing about 6% faster; the output is
   byte-identical. Browsers need SIMD support: Safari (and iOS) 16.4 or
