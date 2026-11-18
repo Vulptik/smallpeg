@@ -75,7 +75,8 @@ errors are in the [API documentation](https://github.com/sawapi/smallpeg/blob/ma
 
 ## Requirements
 
-Node 22.12 or later, or a current browser (directly or through a bundler).
+Node 22.12 or later, or a current browser (directly or through a bundler;
+Safari 16.4 or later).
 TypeScript types need TypeScript 5.7 or later.
 
 ## License

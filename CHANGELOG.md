@@ -3,6 +3,13 @@
 Notable changes per version. 0.13.0 is the first published release; the
 entries before it record development that preceded publication.
 
+## Unreleased
+
+- npm package: the WebAssembly build uses 128-bit SIMD. Decoding is about
+  a third faster and resizing about 6% faster; the output is
+  byte-identical. Browsers need SIMD support: Safari (and iOS) 16.4 or
+  later, from March 2023; Chrome and Firefox have had it since 2021.
+
 ## 0.14.0
 
 The Rust API is unchanged, and so is the encoder's output. The npm

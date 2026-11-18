@@ -25,7 +25,13 @@ if [[ ! -x npm/node_modules/.bin/tsc ]]; then
   exit 1
 fi
 
-cargo build --manifest-path wasm/Cargo.toml --release --target wasm32-unknown-unknown
+# 128-bit SIMD lets the compiler vectorize loops (decoding is about a third
+# faster); every current browser and Node 22 support it. Added to RUSTFLAGS
+# rather than the per-target variable, which RUSTFLAGS would override.
+# With --target, RUSTFLAGS applies to the wasm build only, not to the host.
+# CARGO_ENCODED_RUSTFLAGS, if set, overrides both and drops SIMD.
+RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-C target-feature=+simd128" \
+  cargo build --manifest-path wasm/Cargo.toml --release --target wasm32-unknown-unknown
 WASM=wasm/target/wasm32-unknown-unknown/release/smallpeg_wasm.wasm
 
 rm -rf npm/node npm/web
@@ -37,7 +43,7 @@ echo '{ "type": "module" }' > npm/web/package.json
 # Shrink further when Binaryen's wasm-opt is installed (optional).
 if command -v wasm-opt >/dev/null; then
   for f in npm/node/smallpeg_wasm_bg.wasm npm/web/smallpeg_wasm_bg.wasm; do
-    wasm-opt -O3 --enable-bulk-memory --enable-nontrapping-float-to-int \
+    wasm-opt -O3 --enable-simd --enable-bulk-memory --enable-nontrapping-float-to-int \
       --enable-sign-ext --enable-reference-types --enable-multivalue \
       --enable-mutable-globals -o "$f" "$f"
   done

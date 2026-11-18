@@ -19,6 +19,21 @@ fn amplitude(v: i32, size: u8) -> u16 {
     }
 }
 
+/// Bit k set when coefficient k is nonzero. Built in groups of eight so
+/// the compiler can turn each group into one vector compare.
+#[inline]
+fn nonzero_mask(blk: &[i16; 64]) -> u64 {
+    let mut nz = 0u64;
+    for (g, chunk) in blk.as_chunks::<8>().0.iter().enumerate() {
+        let mut m = 0u8;
+        for (j, &v) in chunk.iter().enumerate() {
+            m |= ((v != 0) as u8) << j;
+        }
+        nz |= (m as u64) << (8 * g);
+    }
+    nz
+}
+
 /// Walk every entropy symbol of the scan. `f(table_id, symbol, nbits, bits)`
 /// where table_id = table_class * 2 + (0 for DC, 1 for AC).
 pub(crate) fn for_each_symbol(
@@ -41,10 +56,7 @@ pub(crate) fn for_each_symbol(
 
         // Visit nonzero AC positions only: a bitmask built branch-free,
         // then walked with trailing_zeros (most blocks are sparse).
-        let mut nz = 0u64;
-        for k in 1..64 {
-            nz |= ((blk[k] != 0) as u64) << k;
-        }
+        let mut nz = nonzero_mask(blk) & !1;
         let mut next = 1u32; // first position not yet coded
         while nz != 0 {
             let k = nz.trailing_zeros();
