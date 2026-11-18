@@ -153,6 +153,10 @@ await web.init(readFileSync(new URL("./web/smallpeg_wasm_bg.wasm", import.meta.u
 await web.init(); // already loaded: same promise, no refetch
 run(web, "web");
 
+// The worker entry point's protocol, over a MessageChannel.
+const { testWorker } = await import("./test-worker.mjs");
+await testWorker(web, web.encode({ data: new Uint8Array(40 * 30 * 3).fill(90), width: 40, height: 30 }));
+
 // Both builds export the same names.
 assert.deepEqual(Object.keys(node).sort(), Object.keys(web).sort());
 

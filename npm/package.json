@@ -20,6 +20,10 @@
       "types": "./dist/web.d.mts",
       "default": "./dist/web.mjs"
     },
+    "./worker": {
+      "types": "./dist/worker.d.mts",
+      "default": "./dist/worker.mjs"
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -54,9 +58,11 @@
     "url": "https://github.com/sawapi/smallpeg/issues"
   },
   "author": "sawapi",
-  "sideEffects": false,
+  "sideEffects": [
+    "./dist/worker-main.mjs"
+  ],
   "scripts": {
-    "prepack": "node -e \"for (const f of ['dist/core.mjs','dist/core.d.mts','dist/node.mjs','dist/node.d.mts','dist/web.mjs','dist/web.d.mts','node/smallpeg_wasm_bg.wasm','web/smallpeg_wasm_bg.wasm']) require('fs').accessSync(f)\" || (cd .. && ./npm/build.sh)",
+    "prepack": "node -e \"for (const f of ['dist/core.mjs','dist/core.d.mts','dist/node.mjs','dist/node.d.mts','dist/web.mjs','dist/web.d.mts','dist/worker.mjs','dist/worker.d.mts','dist/worker-main.mjs','dist/protocol.mjs','dist/protocol.d.mts','node/smallpeg_wasm_bg.wasm','web/smallpeg_wasm_bg.wasm']) require('fs').accessSync(f)\" || (cd .. && ./npm/build.sh)",
     "test": "node test.mjs && tsc -p test-types.tsconfig.json && tsc -p test-types-node.tsconfig.json && tsc -p test-types-bundler.tsconfig.json"
   },
   "devDependencies": {

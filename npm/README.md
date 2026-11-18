@@ -44,7 +44,15 @@ const jpeg = encode(ctx.getImageData(0, 0, w, h)); // RGBA, alpha onto white
 const blob = new Blob([jpeg], { type: "image/jpeg" });
 ```
 
-Encoding is synchronous; for large images, run it in a Web Worker.
+Encoding is synchronous. To keep the page responsive, run it in a Web
+Worker that the package starts for you:
+
+```js
+import { createWorker } from "smallpeg/worker";
+
+const smallpeg = createWorker(); // loads the wasm by itself
+const jpeg = await smallpeg.encode(ctx.getImageData(0, 0, w, h));
+```
 
 ## Features
 
@@ -70,6 +78,7 @@ Encoding is synchronous; for large images, run it in a Web Worker.
 | `crop(image, { x, y, width, height })` | Cropped image, or `undefined` |
 | `fitWithin(width, height, maxWidth, maxHeight)` | `[width, height]` that fits |
 | `init(wasm?)`, `initSync(bytes)` | Load the WebAssembly module (browser build; no-ops in Node) |
+| `createWorker({ wasm? })` (from `/worker`) | The functions above returning promises, run in a Web Worker; `ready`, `terminate()` |
 
 Images are plain `{ data, width, height, channels }` objects, and every
 image a function returns can be passed to the next. Details, options and

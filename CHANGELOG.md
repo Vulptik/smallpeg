@@ -5,6 +5,10 @@ entries before it record development that preceded publication.
 
 ## Unreleased
 
+- npm: `smallpeg/worker` runs the functions in a Web Worker.
+  `createWorker()` returns the same functions returning promises, plus
+  `ready` and `terminate()`; errors arrive as the same classes, and
+  returned bytes and image data are moved back without a copy.
 - `upright_jpeg` (npm: `upright`) turns a JPEG upright by its EXIF
   orientation without decoding it to pixels: blocks of quantized
   coefficients are moved, mirrored and transposed, so no quality is lost,
