@@ -135,5 +135,5 @@ with `std::thread` (no extra dependencies). The output is byte-identical.
 It is not available on `wasm32-unknown-unknown`.
 
 ```toml
-smallpeg = { version = "0.14", features = ["parallel"] }
+smallpeg = { version = "0.15", features = ["parallel"] }
 ```

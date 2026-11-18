@@ -3,7 +3,13 @@
 Notable changes per version. 0.13.0 is the first published release; the
 entries before it record development that preceded publication.
 
-## Unreleased
+## 0.15.0
+
+New: `upright_jpeg` (npm: `upright`) and the npm `smallpeg/worker` entry.
+The encoder's output is unchanged. Re-coding output changes only where
+noted below (late APPn/COM segments stay in place). Files with an invalid
+progressive scan order are now refused. The npm package needs WebAssembly
+SIMD (Safari 16.4 or later).
 
 - Fix: re-coding (`optimize_jpeg`, `upright_jpeg`, and the encoder) could
   panic, and in WebAssembly abort the instance, on symbol counts so
