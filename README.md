@@ -70,7 +70,7 @@ if let Some(smaller) = smallpeg::optimize_jpeg(&input) {
 ## Requirements
 
 Rust 1.88 or later. The npm package needs Node 22.12 or later, or a
-current browser.
+current browser (Safari 16.4 or later).
 
 ## License
 
