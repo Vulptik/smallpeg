@@ -2,6 +2,9 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <!-- Everything comes from this origin; the inline theme script below is
+       allowed by its hash (site/build.sh checks it). -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-v6PB8euj6Cxr3zVsszmB741h3Iwpbp1ps4b02sfBYDw='; style-src 'self'; img-src 'self' blob: data:; worker-src 'self' blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>smallpeg — small JPEGs, zero dependencies</title>
   <meta name="description" content="A JPEG encoder, optimizer and decoder written from the JPEG standard in Rust, with no dependencies. Try it in your browser: your image never leaves your device.">
@@ -108,7 +111,7 @@
           </div>
         </div>
 
-        <form class="settings" id="settings" onsubmit="return false">
+        <form class="settings" id="settings">
           <div class="field">
             <label for="quality">Quality <output id="qOut" for="quality">80</output></label>
             <input type="range" id="quality" min="30" max="95" step="1" value="80">
@@ -317,7 +320,7 @@ const blob = new Blob([jpeg], { type: "image/jpeg" });</code></pre>
     </div>
   </footer>
 
-  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <svg class="sprites" width="0" height="0" aria-hidden="true">
     <symbol id="mark" viewBox="0 0 32 32">
       <rect x="3" y="3" width="26" height="26" rx="7" fill="var(--accent)"/>
       <rect class="c" x="8" y="8" width="7" height="7" rx="1.5"/>

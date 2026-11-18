@@ -396,3 +396,6 @@ h2 { margin: 0; font-size: clamp(1.7rem, 3.4vw, 2.3rem); letter-spacing: -.025em
 .tabs { overflow-x: auto; }
 .tabs button { white-space: nowrap; }
 @media (max-width: 520px) { .tabs button { padding: 8px 10px 10px; } }
+
+/* The hidden SVG symbol sprite at the end of the page. */
+.sprites { position: absolute; }

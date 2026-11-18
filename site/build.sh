@@ -4,6 +4,11 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# The page's Content-Security-Policy allows its one inline script by hash:
+# refuse to build if the script changed without the hash.
+hash=$(python3 -c 'import re,hashlib,base64; s=open("site/index.html", encoding="utf-8").read(); m=re.search(r"<script>(.*?)</script>", s, re.S); print(base64.b64encode(hashlib.sha256(m.group(1).encode()).digest()).decode())')
+grep -q "'sha256-$hash'" site/index.html || { echo "site/index.html: update the CSP hash of the inline script to sha256-$hash" >&2; exit 1; }
+
 ./npm/build.sh
 rm -rf site/dist
 mkdir -p site/dist/pkg/dist site/dist/pkg/web

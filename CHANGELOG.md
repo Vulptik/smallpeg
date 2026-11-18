@@ -25,10 +25,15 @@ entries before it record development that preceded publication.
   working image of that size, so until now a small image resized to a
   very long, thin or wide shape could run the WebAssembly out of memory
   or overflow its 32-bit sizes instead of throwing.
+- Website: a Content-Security-Policy limits the page to its own scripts,
+  styles and workers.
 - npm: `smallpeg/worker` runs the functions in a Web Worker.
   `createWorker()` returns the same functions returning promises, plus
   `ready` and `terminate()`; errors arrive as the same classes, and
-  returned bytes and image data are moved back without a copy.
+  returned bytes and image data are moved back without a copy. After a
+  WebAssembly error (a trap, such as running out of memory) the worker
+  stops and rejects later calls, instead of reusing a module that may be
+  in an inconsistent state.
 - `upright_jpeg` (npm: `upright`) turns a JPEG upright by its EXIF
   orientation without decoding it to pixels: blocks of quantized
   coefficients are moved, mirrored and transposed, so no quality is lost,
