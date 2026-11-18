@@ -1,0 +1,87 @@
+name: Speed
+
+# Times a pull request against its base branch on the same runner, so
+# machine-to-machine variation cancels out. Both builds run the pull
+# request's examples/speed.rs, alternating, and the fastest run counts.
+# It measures native code only; the WebAssembly build is not timed here.
+on:
+  pull_request:
+    paths:
+      - "src/**"
+      - "examples/speed.rs"
+      - "Cargo.toml"
+      - ".github/workflows/speed.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: speed-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: head
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.base_ref }}
+          path: base
+      # No build cache: a cache saved by one pull request is not visible
+      # to the next, and this job does not run on main.
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build
+        id: build
+        run: |
+          mkdir -p base/examples
+          cp head/examples/speed.rs base/examples/speed.rs
+          (cd head && cargo build --release --example speed)
+          # The base may lack an API that a new speed.rs times: then there
+          # is nothing to compare against, which is not a failure.
+          if (cd base && cargo build --release --example speed); then
+            echo "base=ok" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::The base branch does not build this speed.rs; comparison skipped."
+            echo "Comparison skipped: the base branch does not build this speed.rs." >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Compare
+        if: steps.build.outputs.base == 'ok'
+        run: |
+          for i in 1 2; do
+            RUNS=5 head/target/release/examples/speed >> head.txt
+            RUNS=5 base/target/release/examples/speed >> base.txt
+          done
+          python3 - <<'PY'
+          import os
+          def best(path):
+              d = {}
+              for line in open(path):
+                  name, ms = line.split()
+                  d[name] = min(d.get(name, float("inf")), float(ms))
+              return d
+          head, base = best("head.txt"), best("base.txt")
+          rows = ["| Task | Base (ms) | This PR (ms) | Change |", "|---|---:|---:|---:|"]
+          slow = []
+          for name, h in head.items():
+              b = base.get(name)
+              if b is None:
+                  rows.append(f"| {name} | | {h:.1f} | new |")
+                  continue
+              change = (h / b - 1) * 100
+              rows.append(f"| {name} | {b:.1f} | {h:.1f} | {change:+.1f}% |")
+              if change > 15:
+                  slow.append(name)
+          text = "\n".join(["## Speed", "", *rows, ""])
+          print(text)
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
+              f.write(text)
+          if slow:
+              raise SystemExit(f"more than 15% slower: {', '.join(slow)}")
+          PY
