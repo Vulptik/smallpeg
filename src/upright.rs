@@ -9,7 +9,7 @@
 //! move: a mirrored axis is trimmed to whole MCUs first.
 
 use crate::ceil_div;
-use crate::optimize::{FComp, Limits, Parsed, encode_parsed, parse_and_decode};
+use crate::optimize::{FComp, Limits, Parsed, Placed, encode_parsed, parse_and_decode};
 use crate::quant::ZIGZAG;
 
 /// Turn a JPEG upright without decoding it to pixels: the EXIF orientation is
@@ -69,36 +69,34 @@ pub fn upright_jpeg_with(data: &[u8], limits: &Limits) -> Option<Vec<u8>> {
         _ => (false, false, false),
     };
 
-    let mut head = Vec::with_capacity(1024);
-    head.extend_from_slice(&[0xFF, 0xD8]);
-    // Every orientation tag copied out becomes 1: the output is upright,
-    // and a tag that viewers ignored here (after the frame header) would
-    // take effect once re-emitted before it.
-    for r in &p.meta {
-        let at = head.len();
-        head.extend_from_slice(&data[r.clone()]);
-        if data[r.start + 1] == 0xE1
-            && let Some((_, pos, le)) = crate::meta::exif_orientation_at(&data[r.start + 4..r.end])
-        {
-            let one: [u8; 2] = if le { [1, 0] } else { [0, 1] };
-            head[at + 4 + pos..at + 4 + pos + 2].copy_from_slice(&one);
-        }
-    }
-    for r in &p.dqt {
-        let seg = &data[r.clone()];
-        if t {
-            head.extend_from_slice(&transpose_dqt(seg));
-        } else {
-            head.extend_from_slice(seg);
-        }
-    }
+    // Every orientation tag copied out becomes 1, wherever it is: the
+    // output is upright, and readers differ on which tags they honor.
+    let placed = Placed::new(
+        data,
+        &p,
+        |seg| {
+            if seg[1] == 0xE1
+                && let Some((_, pos, le)) = crate::meta::exif_orientation_at(&seg[4..])
+            {
+                let one: [u8; 2] = if le { [1, 0] } else { [0, 1] };
+                seg[4 + pos..4 + pos + 2].copy_from_slice(&one);
+            }
+        },
+        |seg, out| {
+            if t {
+                out.extend_from_slice(&transpose_dqt(seg));
+            } else {
+                out.extend_from_slice(seg);
+            }
+        },
+    );
 
     let p = if (t, fx, fy) == (false, false, false) {
         p
     } else {
         transform(p, t, fx, fy)?
     };
-    Some(encode_parsed(head, p, true))
+    Some(encode_parsed(placed, p, true))
 }
 
 /// Zigzag position of each natural-order index.
