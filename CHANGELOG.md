@@ -10,6 +10,8 @@ entries before it record development that preceded publication.
   through an sRGB canvas, which dulled the most saturated colors; they
   are now read in Display P3 and the output carries a Display P3
   profile. Other images are encoded as before.
+- Website: HDR photos are previewed at standard brightness, so the
+  original and the output are compared on equal terms.
 
 ## 0.15.0
 
