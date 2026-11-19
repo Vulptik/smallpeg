@@ -1,12 +1,15 @@
 // Runs the npm package's browser entry off the main thread.
 import { init, encode, optimize, stripMetadata, fitWithin, resize } from "./pkg/dist/web.mjs";
+import { displayP3Profile, withIcc } from "./p3.js";
+
+let p3Profile;
 
 init().then(
   () => postMessage({ ready: true }),
   (e) => postMessage({ ready: false, error: String((e && e.message) || e) }),
 );
 
-function compress({ input, width, height, quality, fullChroma, maxSide }) {
+function compress({ input, width, height, quality, fullChroma, maxSide, p3 }) {
   // Canvas pixels are RGBA; flatten alpha onto white, then reduce if asked.
   const rgba = new Uint8Array(input);
   const rgb = new Uint8Array(width * height * 3);
@@ -19,7 +22,9 @@ function compress({ input, width, height, quality, fullChroma, maxSide }) {
     const [w, h] = fitWithin(width, height, maxSide, maxSide);
     if (w !== width || h !== height) image = resize(image, w, h, { linear: true });
   }
-  return encode(image, { quality, fullColor: fullChroma });
+  const jpeg = encode(image, { quality, fullColor: fullChroma });
+  // Display P3 pixels need their profile, or they are read as sRGB.
+  return p3 ? withIcc(jpeg, (p3Profile ??= displayP3Profile())) : jpeg;
 }
 
 onmessage = ({ data }) => {

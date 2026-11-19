@@ -3,6 +3,14 @@
 Notable changes per version. 0.13.0 is the first published release; the
 entries before it record development that preceded publication.
 
+## Unreleased
+
+- Website: photos with colors outside sRGB, such as Display P3 photos
+  from an iPhone, keep those colors when re-encoded. They were read
+  through an sRGB canvas, which dulled the most saturated colors; they
+  are now read in Display P3 and the output carries a Display P3
+  profile. Other images are encoded as before.
+
 ## 0.15.0
 
 New: `upright_jpeg` (npm: `upright`) and the npm `smallpeg/worker` entry.
