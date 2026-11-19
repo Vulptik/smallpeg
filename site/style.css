@@ -294,7 +294,8 @@ h2 { margin: 0; font-size: clamp(1.7rem, 3.4vw, 2.3rem); letter-spacing: -.025em
 .brand .mark rect.c { fill: var(--on-accent); }
 .nav nav a.ext { color: var(--text); font-weight: 550; }
 .peek { position: relative; flex: 1 1 0; min-height: 120px; margin: 0 0 12px; border-radius: 10px; overflow: hidden; background: transparent; touch-action: none; user-select: none; -webkit-user-select: none; cursor: pointer; }
-.peek img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; -webkit-user-drag: none; }
+/* Show HDR photos (a gain map) at normal brightness, as the output is. */
+.peek img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; -webkit-user-drag: none; dynamic-range-limit: standard; }
 .peek img.orig { visibility: hidden; }
 .peek.hold img.orig { visibility: visible; }
 .peek.hold img.out { visibility: hidden; }
@@ -362,7 +363,7 @@ h2 { margin: 0; font-size: clamp(1.7rem, 3.4vw, 2.3rem); letter-spacing: -.025em
 .cmp-view { position: relative; overflow: hidden; touch-action: none; cursor: grab; user-select: none; -webkit-user-select: none; }
 .cmp-view.panning { cursor: grabbing; }
 .cmp-clip { position: absolute; top: 0; bottom: 0; right: 0; overflow: hidden; pointer-events: none; }
-.cmp-view img { position: absolute; left: 0; top: 0; transform-origin: 0 0; max-width: none; -webkit-user-drag: none; pointer-events: none; }
+.cmp-view img { position: absolute; left: 0; top: 0; transform-origin: 0 0; max-width: none; -webkit-user-drag: none; pointer-events: none; dynamic-range-limit: standard; }
 .cmp-view.px img { image-rendering: pixelated; }
 .cmp-divider { position: absolute; top: 0; bottom: 0; width: 0; cursor: ew-resize; }
 .cmp-divider::before { content: ""; position: absolute; top: 0; bottom: 0; left: -1px; width: 2px; background: #fff; box-shadow: 0 0 0 1px rgb(0 0 0 / .35); }
