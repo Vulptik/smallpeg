@@ -12,7 +12,7 @@ grep -q "'sha256-$hash'" site/index.html || { echo "site/index.html: update the 
 ./npm/build.sh
 rm -rf site/dist
 mkdir -p site/dist/pkg/dist site/dist/pkg/web
-cp site/index.html site/style.css site/app.js site/worker.js site/favicon.svg site/dist/
+cp site/index.html site/style.css site/app.js site/worker.js site/p3.js site/favicon.svg site/dist/
 cp -R site/samples site/dist/
 # The package's own browser entry, laid out as in the package so its
 # relative imports resolve.

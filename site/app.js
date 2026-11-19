@@ -1,3 +1,5 @@
+import { outsideSrgb } from "./p3.js";
+
 const $ = (id) => document.getElementById(id);
 const stage = $("stage");
 
@@ -69,15 +71,11 @@ async function takeFile(f) {
     const head = new Uint8Array(bytes, 0, Math.min(2, bytes.byteLength));
     // Decode with the browser (applies EXIF orientation) to get pixels.
     const bmp = await createImageBitmap(f);
-    const cv = document.createElement("canvas");
-    cv.width = bmp.width;
-    cv.height = bmp.height;
-    const cx = cv.getContext("2d", { willReadFrequently: true });
-    cx.drawImage(bmp, 0, 0);
-    const rgba = cx.getImageData(0, 0, bmp.width, bmp.height).data.buffer;
+    const { rgba, p3 } = pixels(bmp);
+    const width = bmp.width, height = bmp.height;
     bmp.close?.();
     if (file) URL.revokeObjectURL(file.url);
-    file = { name: f.name, bytes, isJpeg: head[0] === 0xff && head[1] === 0xd8, url: URL.createObjectURL(f), rgba, width: cv.width, height: cv.height };
+    file = { name: f.name, bytes, isJpeg: head[0] === 0xff && head[1] === 0xd8, url: URL.createObjectURL(f), rgba, p3, width, height };
   } catch {
     showError(f.name, "This browser couldn't read that image.");
     return;
@@ -114,6 +112,32 @@ addEventListener("drop", (e) => {
   drop.classList.remove("over");
   takeFile(e.dataTransfer.files[0]);
 });
+
+// The image's pixels as RGBA. A canvas is sRGB unless asked otherwise, and
+// drawing a wide-gamut photo (Display P3, as from an iPhone) into one
+// dulls its most saturated colors. So read it in Display P3 where the
+// browser can, and keep that when some color is outside sRGB (the worker
+// then attaches a Display P3 profile); otherwise read it in sRGB as before.
+function pixels(bmp) {
+  const read = (colorSpace) => {
+    const cv = document.createElement("canvas");
+    cv.width = bmp.width;
+    cv.height = bmp.height;
+    const cx = cv.getContext("2d", { colorSpace, willReadFrequently: true });
+    if (!cx || (cx.getContextAttributes?.().colorSpace ?? "srgb") !== colorSpace) return null;
+    cx.drawImage(bmp, 0, 0);
+    const data = cx.getImageData(0, 0, bmp.width, bmp.height, { colorSpace }).data;
+    cv.width = cv.height = 0; // free the canvas now, not at garbage collection
+    return data;
+  };
+  let wide = null;
+  try {
+    wide = read("display-p3");
+  } catch {}
+  if (wide && outsideSrgb(wide)) return { rgba: wide.buffer, p3: true };
+  wide = null;
+  return { rgba: read("srgb").buffer, p3: false };
+}
 
 // ---- settings -----------------------------------------------------------
 // The settings never submit anywhere (Enter in a field would reload the page).
@@ -164,7 +188,7 @@ function run() {
   $("elapsed").textContent = "0.0";
   // Copy: the original stays here so settings can be changed and re-run.
   const input = (s.lossless ? file.bytes : file.rgba).slice(0);
-  worker.postMessage({ id, input, width: file.width, height: file.height, ...s }, [input]);
+  worker.postMessage({ id, input, width: file.width, height: file.height, p3: file.p3, ...s }, [input]);
 }
 function stopTimer() {
   if (running) clearInterval(running.timer);
